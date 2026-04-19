@@ -5,7 +5,7 @@ VenueFlow AI — Flask Application Factory
 import sys
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory # Added send_from_directory
 from flask_cors import CORS
 
 from backend.config import Config
@@ -21,7 +21,9 @@ import backend.api.sockets  # Register socket events
 
 
 def create_app() -> Flask:
-    app = Flask(__name__)
+    # Set static_folder to 'static' (where Docker will put your React build)
+    app = Flask(__name__, static_folder='static', static_url_path='')
+    
     app.config.from_mapping(
         SECRET_KEY=Config.SECRET_KEY,
     )
@@ -37,6 +39,20 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(config_bp)
 
+    # ── Frontend Serving Logic ────────────────────────────────
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve(path):
+        """
+        Serves the React frontend. 
+        If the file exists in 'static', serve it. 
+        Otherwise, serve index.html (for React Router support).
+        """
+        if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+            return send_from_directory(app.static_folder, path)
+        else:
+            return send_from_directory(app.static_folder, 'index.html')
+
     # ── Health check ─────────────────────────────────────────
     @app.route("/api/health")
     def health():
@@ -50,13 +66,14 @@ def create_app() -> Flask:
         from backend.services.redis_service import init_redis_data
         init_redis_data()
     except Exception as e:
-        print(f"Failed to intialize redis data {e}")
+        print(f"Failed to initialize redis data {e}")
 
     return app
 
 
 # ── Direct run ───────────────────────────────────────────────
+# Change: Gunicorn expects 'app', so we assign the result of create_app()
+app = create_app()
+
 if __name__ == "__main__":
-    application = create_app()
-    # Using threading mode (default) instead of eventlet for stable Windows operation
-    socketio.run(application, host="0.0.0.0", port=5000, debug=True, log_output=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True, log_output=True)
