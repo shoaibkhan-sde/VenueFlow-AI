@@ -26,7 +26,7 @@ Space: O(N) for the heap.
 import heapq
 from typing import List, Optional, Tuple
 
-from backend.core.models import Gate, RouteRecommendation
+from core.models import Gate, RouteRecommendation
 
 
 # ── Tuning constants ─────────────────────────────────────────

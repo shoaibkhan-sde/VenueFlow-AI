@@ -45,8 +45,8 @@ import time
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.config import Config
-from backend.services.redis_service import get_all_zones, get_all_gates
+from config import Config
+from services.redis_service import get_all_zones, get_all_gates
 
 logger = logging.getLogger("venueflow.ai")
 

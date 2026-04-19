@@ -9,7 +9,7 @@ Alerts are stored in a circular buffer (max 50).  They are emitted via the
 from collections import deque
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
-from backend.extensions import socketio
+from extensions import socketio
 
 alerts_bp = Blueprint("alerts", __name__)
 

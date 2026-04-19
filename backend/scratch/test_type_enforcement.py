@@ -4,7 +4,7 @@ import sys
 # Add the project root to sys.path so we can import 'backend'
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from backend.services.maps_service import distances_to_gates
+from services.maps_service import distances_to_gates
 
 class MockGate:
     def __init__(self, gate_id, latitude, longitude):

@@ -19,6 +19,7 @@ from api.routes_auth import auth_bp
 from api.routes_config import config_bp
 
 import api.sockets  # Register socket events
+from services.simulation_service import start_simulation
 
 
 def create_app() -> Flask:
@@ -69,6 +70,10 @@ def create_app() -> Flask:
         init_redis_data()
     except Exception as e:
         print(f"Failed to initialize redis data {e}")
+
+    # ── Simulation Service ───────────────────────────────────
+    # Start background data updates
+    start_simulation(app)
 
     return app
 

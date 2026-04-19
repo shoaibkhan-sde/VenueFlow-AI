@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from backend.config import Config
+from config import Config
 
 config_bp = Blueprint("config", __name__)
 

@@ -5,7 +5,7 @@ VenueFlow AI — WebSocket Event Handlers
 
 from flask_socketio import emit
 from flask import request
-from backend.extensions import socketio
+from extensions import socketio
 
 # Per-session conversation history keyed by socket session ID
 # { sid: [{"role": "user"|"assistant", "content": "..."}] }
@@ -34,8 +34,8 @@ def handle_disconnect():
 
 @socketio.on('chat_message')
 def handle_chat(data):
-    from backend.services import gemini_service
-    from backend.services.redis_service import get_all_zones, get_all_gates
+    from services import gemini_service
+    from services.redis_service import get_all_zones, get_all_gates
 
     msg = data.get("message", "").strip()
     if not msg:
@@ -59,7 +59,7 @@ def handle_chat(data):
         )
 
         try:
-            from backend.api.routes_alerts import _alert_log
+            from api.routes_alerts import _alert_log
             recent_alerts = list(_alert_log)[:5]
             alert_lines = "\n".join(
                 f"  [{a['level'].upper()}] {a['title']}: {a['message']}"

@@ -4,8 +4,8 @@ import sys
 # Add the project root to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from backend.core.models import Gate
-from backend.core.analyzer import _composite_score, PHASE_BONUS_FACTOR, PHASE_PENALTY_FACTOR
+from core.models import Gate
+from core.analyzer import _composite_score, PHASE_BONUS_FACTOR, PHASE_PENALTY_FACTOR
 
 def test_scoring():
     # Mock a high-throughput gate

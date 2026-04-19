@@ -7,7 +7,7 @@ import googlemaps
 from cachetools import TTLCache, cached
 from cachetools.keys import hashkey
 from typing import Tuple
-from backend.config import Config
+from config import Config
 
 _R = 6_371_000
 

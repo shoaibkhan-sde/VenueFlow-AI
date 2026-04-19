@@ -6,8 +6,8 @@ Manages real-time state for zones and gates across the backend.
 import redis
 import json
 import os
-from backend.config import Config
-from backend.core.models import Gate, Zone
+from config import Config
+from core.models import Gate, Zone
 
 # Initialize Redis client with tight timeouts
 redis_client = redis.from_url(

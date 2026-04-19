@@ -9,7 +9,7 @@ if sys.platform == "win32":
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-from backend.services.gemini_service import chat
+from services.gemini_service import chat
 
 print("--- Testing AI Assistant Mock Logic ---")
 print("\nQuestion: 'I am hungry, where is the food?'")

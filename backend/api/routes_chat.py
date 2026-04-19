@@ -6,9 +6,9 @@ WebSocket chat is handled entirely in sockets.py.
 """
 
 from flask import Blueprint, request, jsonify
-from backend.services import gemini_service
-from backend.services.redis_service import get_all_zones
-from backend.core.models import Zone
+from services import gemini_service
+from services.redis_service import get_all_zones
+from core.models import Zone
 
 chat_bp = Blueprint("chat", __name__)
 

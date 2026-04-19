@@ -6,10 +6,10 @@ POST /api/gates/rebalance → load-balance incoming crowd
 """
 
 from flask import Blueprint, request, jsonify
-from backend.core.models import Gate
-from backend.core.analyzer import find_fastest_gate, rebalance_crowd
-from backend.services.maps_service import distances_to_gates
-from backend.services.redis_service import get_all_gates, set_gate, get_event_phase
+from core.models import Gate
+from core.analyzer import find_fastest_gate, rebalance_crowd
+from services.maps_service import distances_to_gates
+from services.redis_service import get_all_gates, set_gate, get_event_phase
 
 gates_bp = Blueprint("gates", __name__)
 

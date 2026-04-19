@@ -1,6 +1,6 @@
 
-from backend.services.maps_service import distances_to_gates
-from backend.core.models import Gate
+from services.maps_service import distances_to_gates
+from core.models import Gate
 
 def test_fix():
     print("Testing maps_service fix with potential tuple data...")
