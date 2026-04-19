@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { Eye, EyeOff, AlertCircle, ArrowRight, CheckCircle2, User, Mail, Lock } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, ArrowRight, CheckCircle2, User, Mail, Lock, X } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
    🔧  UTILITY — password strength
@@ -259,7 +259,7 @@ function StrengthBar({ password }) {
 /* ─────────────────────────────────────────────
    🎯  MAIN PAGE
 ───────────────────────────────────────────── */
-export default function LoginPage() {
+export default function LoginPage({ onClose }) {
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -310,10 +310,19 @@ export default function LoginPage() {
       if (mode === 'signin') {
         const r = await login(email, password, rememberMe);
         if (!r.success) setError(r.error || 'Invalid credentials. Try again.');
-        else setSuccess(true);
+        else {
+          setSuccess(true);
+          // Auto-close overlay after success animation
+          if (onClose) setTimeout(onClose, 2000);
+        }
       } else {
         const r = await register(email, password, displayName);
-        if (r.success) { setSuccess(true); await login(email, password); }
+        if (r.success) { 
+          setSuccess(true); 
+          await login(email, password);
+          // Auto-close overlay after success animation
+          if (onClose) setTimeout(onClose, 2000);
+        }
         else setError(r.error || 'Registration failed. Please try again.');
       }
     } catch { setError('An unexpected error occurred.'); }
@@ -408,6 +417,33 @@ export default function LoginPage() {
 
             {/* Top highlight bar */}
             <div style={{ position: 'absolute', inset: '0 0 auto 0', height: '1px', background: 'linear-gradient(90deg, transparent 0%, rgba(26,115,232,0.58) 28%, rgba(6,182,212,0.58) 72%, transparent 100%)', pointerEvents: 'none' }} />
+
+            {/* Close Button */}
+            {onClose && (
+              <button
+                onClick={onClose}
+                style={{
+                  position: 'absolute', top: '20px', right: '20px',
+                  width: '32px', height: '32px', borderRadius: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.3)', cursor: 'pointer', zIndex: 50,
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                  e.currentTarget.style.color = '#fff';
+                  e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                }}
+              >
+                <X size={16} />
+              </button>
+            )}
 
             {/* ── Brand ── */}
             <motion.div

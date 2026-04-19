@@ -108,18 +108,12 @@ def process_tick_data(data: dict):
     }
     socketio.emit("gates_update", gates_data)
 
-    # 6. Evaluate alerts
+    # 6. Evaluate alerts (Redis-backed service)
     try:
-        from api.routes_alerts import (
-            evaluate_zone_alerts, 
-            evaluate_gate_alerts, 
-            dispatch_pulse_event
-        )
-        evaluate_zone_alerts(crowd_data["zones"])
-        evaluate_gate_alerts(gate_dicts)
-        dispatch_pulse_event()
-    except Exception:
-        pass
+        from services.alert_service import evaluate_metrics
+        evaluate_metrics(zones=crowd_data["zones"], gates=gate_dicts)
+    except Exception as e:
+        print(f"[CROWD ERR] Alert evaluation failed: {e}")
 
     # 7. Emit KPI metrics
     open_gates = [g for g in gates if g.is_open]

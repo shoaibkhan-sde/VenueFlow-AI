@@ -14,8 +14,7 @@ export function useCrowdData() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!token) return; // wait for auth
-    const headers = { 'Authorization': `Bearer ${token}` };
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     // Initial fetch to populate immediately
     Promise.all([

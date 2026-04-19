@@ -151,14 +151,21 @@ export default function CrowdSnapshot() {
         {/* Card 4: Fast Entry Gates */}
         <SnapshotCard
           label={`Fast Gates for ${locationName}`}
-          title={localClearGates.length > 0 ? `${localClearGates.length} ${localClearGates.length === 1 ? 'Gate' : 'Gates'}` : "0 Gates"}
+          title={localClearGates.length > 0 
+            ? `${localClearGates.length} ${localClearGates.length === 1 ? 'Gate' : 'Gates'}` 
+            : (bestLocalGate ? "Best Gate" : "0 Gates")}
           sub={localClearGates.length > 0
             ? `${localClearGates.map(g => g.name).join(', ')} currently clear`
-            : (allClearGates.length > 0 ? `${allClearGates.length} options elsewhere` : "All entries heavy")}
-          secondary={bestGlobalGate ? `${bestGlobalGate.name} is the absolute fastest entry` : "Standard entry applies"}
-          icon={<Zap size={20} />}
-          status={localClearGates.length > 0 ? 'good' : (allClearGates.length > 0 ? 'caution' : 'crowded')}
+            : (bestLocalGate ? `${bestLocalGate.name} recommended` : "All entries heavy")}
+          secondary={bestLocalGate ? `${bestLocalGate.name} is the optimal entry point` : "Standard entry applies"}
+          icon={<Zap size={20} />} // Changed to Zap to match the fast entry theme
+          status={localClearGates.length > 0 ? 'good' : (bestLocalGate ? 'caution' : 'crowded')}
           locationTag={locationName}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('venueflow:action', {
+              detail: { tab: 'gates' }
+            }));
+          }}
         />
       </div>
     </div>

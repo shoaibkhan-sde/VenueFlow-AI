@@ -8,9 +8,8 @@ import random
 import threading
 from services.crowd_service import process_tick_data
 
-# Use constants from sensor_generator / config
+# Use constants from config
 INTERVAL_SEC = 30.0
-JITTER_PCT = 0.08
 
 ZONES_META = [
     {"zone_id": "north-stand",       "capacity": 25000, "base": 18200},
@@ -33,34 +32,114 @@ GATES_META = [
     {"gate_id": "gate-vip", "queue": 10,  "is_open": True},
 ]
 
-def _jitter(value: int, capacity: int) -> int:
-    if value == 0: value = 10
-    delta = int(value * JITTER_PCT * random.uniform(-1, 1.2))
-    return max(0, min(value + delta, capacity))
+# Event phases (cycles every 5 ticks per phase)
+EVENT_PHASES = [
+    {
+        "name": "🏟️  Pre-match Arrival Surge",
+        "zone_targets": {
+            "north-stand": 0.88, "south-stand": 0.75, "east-wing": 0.82,
+            "west-wing": 0.55,   "food-court-north": 0.60, "food-court-south": 0.35,
+            "vip-lounge": 0.70,  "parking-a": 0.92,
+        },
+        "gate_queue_multiplier": 2.2 # Heavy gates to trigger wait alerts
+    },
+    {
+        "name": "🍟  Half-time RUSH",
+        "zone_targets": {
+            "north-stand": 0.45, "south-stand": 0.40, "east-wing": 0.50,
+            "west-wing": 0.45,   "food-court-north": 0.98, "food-court-south": 0.92,
+            "vip-lounge": 0.90,  "parking-a": 0.95,
+        },
+        "gate_queue_multiplier": 0.8
+    },
+    {
+        "name": "🚨  Post-match Exodus",
+        "zone_targets": {
+            "north-stand": 0.30, "south-stand": 0.25, "east-wing": 0.35,
+            "west-wing": 0.20,   "food-court-north": 0.30, "food-court-south": 0.45,
+            "vip-lounge": 0.10,  "parking-a": 0.40,
+        },
+        "gate_queue_multiplier": 3.0 # Maximum gate wait alerts
+    }
+]
 
-def generate_payload(zones, gates):
+def _lerp_toward(current: int, target: int, capacity: int, speed=0.30) -> int:
+    """Gradually move current toward target occupancy with jitter."""
+    diff = target - current
+    step = int(diff * speed) + random.randint(-int(capacity * 0.02), int(capacity * 0.02))
+    return max(0, min(current + step, capacity))
+
+def generate_payload(zones, gates, tick_count):
+    phase_idx = (tick_count // 5) % len(EVENT_PHASES)
+    phase = EVENT_PHASES[phase_idx]
+    
     zones_payload, gates_payload = [], []
     for zone in zones:
-        zone["base"] = _jitter(zone["base"], zone["capacity"])
+        target_occ = int(phase["zone_targets"].get(zone["zone_id"], 0.5) * zone["capacity"])
+        zone["base"] = _lerp_toward(zone["base"], target_occ, zone["capacity"])
         zones_payload.append({"zoneId": zone["zone_id"], "occupancy": zone["base"]})
+    
     for gate in gates:
-        gate["queue"] = _jitter(gate["queue"], 1000)
+        base_queue = gate.get("queue", 100)
+        target_q = int(base_queue * phase["gate_queue_multiplier"] * random.uniform(0.7, 1.3))
+        gate["queue"] = _lerp_toward(gate["queue"], target_q, 1000)
         gates_payload.append({"gateId": gate["gate_id"], "queue": gate["queue"], "isOpen": gate["is_open"]})
-    return {"zones": zones_payload, "gates": gates_payload, "event_phase": "Normal"}
+        
+    return {"zones": zones_payload, "gates": gates_payload, "event_phase": phase["name"]}
 
 def simulation_loop(app):
     """Background loop that executes tick every X seconds."""
     zones = [dict(z) for z in ZONES_META]
     gates = [dict(g) for g in GATES_META]
+    tick_count = 0
     
-    print("[OK] Background Simulation Loop Started")
+    print("[OK] Background Simulation Loop (Dynamic Phase Engine) Started")
     
+    with app.app_context():
+        try:
+            from services.alert_service import push_alert
+            push_alert(
+                level="info", 
+                category="system", 
+                title="📡 Intelligence Feed Active", 
+                message="VenueFlow operational signals are now broadcasting live via Redis Broker.",
+                force_immediate=True
+            )
+            push_alert(
+                level="info", 
+                category="system", 
+                title="🛡️ Security Systems Online", 
+                message="Sensors initialized. Alerts are now cross-process persistent.",
+                force_immediate=True
+            )
+        except Exception as e:
+            print(f"[SIM ERR] Failed to push startup alerts: {e}")
+
     while True:
         with app.app_context():
             try:
-                payload = generate_payload(zones, gates)
+                from services.alert_service import push_alert
+                
+                # ── HEARTBEAT ALERTS ──
+                # Every tick (30s), push a heartbeat status check message
+                if tick_count >= 0:
+                    heartbeats = [
+                        "Probing North Stand density sensors...",
+                        "Syncing East Gate throughput metrics...",
+                        "Calculating optimal egress paths...",
+                        "Refreshing concession queue telemetry...",
+                        "Monitoring stadium perimeter status..."
+                    ]
+                    push_alert(
+                        level="info",
+                        category="system",
+                        title="🔍 Operational Scan (Live)",
+                        message=random.choice(heartbeats)
+                    )
+
+                payload = generate_payload(zones, gates, tick_count)
                 process_tick_data(payload)
-                # print(f"[SIM] Tick processed ({INTERVAL_SEC}s)")
+                tick_count += 1
             except Exception as e:
                 print(f"[SIM ERR] Failed to process background tick: {e}")
         

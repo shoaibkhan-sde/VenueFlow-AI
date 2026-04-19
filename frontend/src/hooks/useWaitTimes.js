@@ -17,10 +17,10 @@ export function useWaitTimes() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!token) return;
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     // Initial fetch just to populate immediately if socket takes a second
-    fetch('/api/crowd', { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch('/api/crowd', { headers })
       .then((res) => res.json())
       .then((json) => {
         setData(json);

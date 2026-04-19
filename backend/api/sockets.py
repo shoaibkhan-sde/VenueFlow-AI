@@ -1,6 +1,7 @@
 # backend/api/sockets.py
 """
 VenueFlow AI — WebSocket Event Handlers
+Manages real-time message exchange and conversational context.
 """
 
 from flask_socketio import emit
@@ -17,25 +18,29 @@ def _get_history(sid: str) -> list[dict]:
     """Return history list for this socket session, creating if needed."""
     if sid not in _session_histories:
         _session_histories[sid] = []
+    # Safeguard against accidental None or wrong type
+    if not isinstance(_session_histories[sid], list):
+        _session_histories[sid] = []
     return _session_histories[sid]
 
 
 @socketio.on('connect')
 def handle_connect():
     _session_histories[request.sid] = []   # fresh history for this client
-    print(f"[INFO] Client connected: {request.sid}")
+    # Clean logging: silent in production to prevent terminal-encoding crashes
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     _session_histories.pop(request.sid, None)  # clean up on disconnect
-    print(f"[INFO] Client disconnected: {request.sid}")
 
 
 @socketio.on('chat_message')
 def handle_chat(data):
-    from services import gemini_service
+    # Robust imports to ensure no hanging or circular dep issues in production
+    import services.gemini_service as gemini_service
     from services.redis_service import get_all_zones, get_all_gates
+    from services.alert_service import get_recent_alerts
 
     msg = data.get("message", "").strip()
     if not msg:
@@ -58,29 +63,28 @@ def handle_chat(data):
             for g in gates
         )
 
+        # 🛰️ Integration: Pull live alerts from the new Redis-backed Alert Service
         try:
-            from api.routes_alerts import _alert_log
-            recent_alerts = list(_alert_log)[:5]
+            recent_alerts = get_recent_alerts()[:5]  # Take top 5 for LLM context
             alert_lines = "\n".join(
                 f"  [{a['level'].upper()}] {a['title']}: {a['message']}"
                 for a in recent_alerts
-            ) or "  None"
+            ) or "  None — all systems nominal."
         except Exception:
-            alert_lines = "  None"
+            alert_lines = "  Data currently unavailable."
 
         # ── Per-session history ───────────────────────────────────
         history = _get_history(request.sid)
-        history.append({"role": "user", "content": msg})
+        history.append({"role": "user", "text": msg})
 
-        # Keep history bounded
+        # Keep history bounded (sliding window)
         if len(history) > MAX_HISTORY * 2:
             history.pop(0)
 
-        # FIX: history goes into CONTEXT only, never into the message itself.
-        # This means _check_intent only ever scans the user's actual new message.
+        # Build history string for the LLM
         history_text = "\n".join(
-            f"{'Fan' if h['role'] == 'user' else 'Assistant'}: {h['content']}"
-            for h in history[:-1]   # exclude the message we just appended
+            f"{'Fan' if h['role'] == 'user' else 'Assistant'}: {h['text']}"
+            for h in history[:-1]   # exclude the current message
         )
 
         context = (
@@ -89,20 +93,22 @@ def handle_chat(data):
             f"[Recent Alerts]\n{alert_lines}"
         )
 
-        # Append history to context, not to the user message
         if history_text:
             context += f"\n\n[Conversation History]\n{history_text}"
 
-        # FIX: pass msg (clean current message only), not full_message
+        # ── Call Intelligence Hub ─────────────────────────────────
         reply_data = gemini_service.chat(msg, context=context)
 
-        # Store assistant reply in this session's history
-        history.append({"role": "assistant", "content": reply_data.get("text", "")})
+        # Update history with the result
+        history.append({"role": "assistant", "text": reply_data.get("text", "")})
 
+        # Final broadcast back to the specific client
         emit("chat_reply", reply_data)
 
-    except Exception as e:
+    except Exception:
+        # Avoid printing 'e' because it may contain emojis/Unicode that crash Windows terminals
         emit("chat_reply", {
-            "text": f"⚠️ Assistant unavailable: {str(e)}",
+            "text": "⚠️ Assistant is busy re-evaluating venue metrics. "
+                    "Please try again in a moment.",
             "options": ["🍔 Food", "🚪 Gates", "📍 Map"]
         })

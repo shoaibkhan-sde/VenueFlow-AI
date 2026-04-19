@@ -166,7 +166,7 @@ export default function SnapshotCard({
         /* ── Full 4-side colored border ──────────────────────────── */
         border: `2px solid ${tok.hex}`,
       }}
-      className="group relative overflow-hidden flex flex-col rounded-xl
+      className="group relative overflow-hidden flex flex-col rounded-lg
                  bg-white dark:bg-slate-900
                  mx-auto p-5"
     >

@@ -24,7 +24,6 @@ export function useMetrics() {
   const [connected, setConnected] = useState(socket.connected);
 
   useEffect(() => {
-    if (!token) return;
 
     const onMetrics = (data) => setMetrics(data);
     const onConnect = () => setConnected(true);

@@ -64,4 +64,3 @@ def simulation_tick(current_user):
     data = request.json or {}
     process_tick_data(data)
     return jsonify({"status": "updated"})
-})

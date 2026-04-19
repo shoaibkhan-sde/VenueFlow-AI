@@ -2,8 +2,14 @@
 VenueFlow AI — Flask Application Factory
 """
 
+import eventlet
+eventlet.monkey_patch()
+
 import sys
 import os
+
+# Path shim: ensures 'backend' is in sys.path so simplified imports work both locally and in Docker
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
@@ -18,7 +24,6 @@ from api.routes_alerts import alerts_bp
 from api.routes_auth import auth_bp
 from api.routes_config import config_bp
 
-import api.sockets  # Register socket events
 from services.simulation_service import start_simulation
 
 
@@ -63,6 +68,9 @@ def create_app() -> Flask:
     # Initialize SocketIO
     socketio.init_app(app)
 
+    # Register socket events (Must happen after init_app in some environments)
+    import api.sockets 
+
     # Initialize Redis Data
     try:
         # Corrected import path
@@ -75,6 +83,13 @@ def create_app() -> Flask:
     # Start background data updates
     start_simulation(app)
 
+    # Purge old history (>10) to reset to new strict requirements
+    with app.app_context():
+        try:
+            from services.alert_service import purge_old_history
+            purge_old_history()
+        except: pass
+
     return app
 
 
@@ -83,4 +98,5 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, log_output=True)
+    # log_output=False prevents terminal-killing UnicodeEncodeErrors in Windows/Docker
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True, log_output=False)

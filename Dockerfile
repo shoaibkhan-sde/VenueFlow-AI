@@ -1,41 +1,46 @@
-# ── Stage 1: Build Frontend ────────────────────────────────
-FROM node:20-slim AS frontend-build
-
+# Stage 1: Build the React frontend
+FROM node:20 AS frontend-builder
 WORKDIR /app/frontend
 
-# Install dependencies first for better caching
-COPY frontend/package*.json ./
-RUN npm install
+# Silence debconf and upgrade npm
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Copy source and build
-COPY frontend/ ./
+COPY frontend/package*.json ./
+RUN npm install -g npm@11.12.1 && npm install
+
+COPY frontend/ .
 RUN npm run build
 
 
-# ── Stage 2: Production Runtime ────────────────────────────
+# Stage 2: Final image with Python backend + React static files
 FROM python:3.10-slim
-
 WORKDIR /app
 
-# Install system dependencies if any (none required for VenueFlow AI yet)
+# Silence debconf and upgrade pip
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python requirements
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Upgrade pip
+RUN pip install --root-user-action=ignore --upgrade pip
 
-# Copy backend application code
-# We copy from the backend folder to the root of our WORKDIR
+COPY backend/requirements.txt ./
+RUN pip install --root-user-action=ignore --no-cache-dir -r requirements.txt
+
+# Copy backend source
 COPY backend/ .
 
-# Copy the built frontend artifacts from Stage 1 into the backend's static folder
-# Stage 1 outputs to frontend/dist; stage 2 expects them in 'static'
-COPY --from=frontend-build /app/frontend/dist ./static
+# Copy built frontend from Stage 1 into the backend's static folder
+# Flask will serve these files from /app/static
+COPY --from=frontend-builder /app/frontend/dist ./static
 
-# Ensure the static folder exists (though COPY --from should create it)
-RUN ls -la ./static || echo "Static folder missing!"
+# Create a non-root user for security
+RUN useradd -m venueflow && chown -R venueflow:venueflow /app
+USER venueflow
 
 # Environment variables
 ENV FLASK_ENV=production

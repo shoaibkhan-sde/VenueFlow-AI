@@ -11,10 +11,9 @@ export function useAlerts(maxAlerts = 30) {
   const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
-    if (!token) return;
-
     // Load historical alerts on mount
-    fetch('/api/alerts', { headers: { 'Authorization': `Bearer ${token}` } })
+    const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+    fetch('/api/alerts', { headers })
       .then((r) => r.json())
       .then((d) => setAlerts(d.alerts || []))
       .catch(() => { });

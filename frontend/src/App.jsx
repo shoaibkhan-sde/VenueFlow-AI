@@ -25,13 +25,12 @@ import { OnboardingProvider, useOnboarding } from './context/OnboardingContext';
 import { socket } from './socket';
 import { useAlerts } from './hooks/useAlerts';
 import { useWaitTimes } from './hooks/useWaitTimes';
-import PullToRefresh from './components/PullToRefresh';
 
 /**
  * HEADER COMPONENT
  */
-function Header({ connected }) {
-  const { logout } = useAuth();
+function Header({ connected, onLoginClick }) {
+  const { token, logout } = useAuth();
   
   return (
     <header className="relative z-50 shrink-0 backdrop-blur-xl bg-theme-card/70 border-b border-theme-main transition-colors duration-500">
@@ -54,9 +53,10 @@ function Header({ connected }) {
           <div className="w-px h-6 bg-theme-main/50" />
           <ThemeToggle />
           <button 
-            onClick={logout}
-            className="flex items-center justify-center p-2 rounded-xl bg-theme-main/5 hover:bg-theme-main/10 text-theme-secondary hover:text-red-500 transition-all cursor-pointer shadow-sm hover:shadow-md"
-            title="Logout"
+            onClick={token ? logout : onLoginClick}
+            className={`flex items-center justify-center p-2 rounded-xl bg-theme-main/5 hover:bg-theme-main/10 transition-all cursor-pointer shadow-sm hover:shadow-md
+              ${token ? 'text-theme-secondary hover:text-red-500' : 'text-accent-blue bg-accent-blue/5 border border-accent-blue/20 hover:bg-accent-blue/10'}`}
+            title={token ? "Logout" : "Sign In"}
           >
             <User size={18} />
           </button>
@@ -108,7 +108,7 @@ class PageErrorBoundary extends React.Component {
   }
 }
 
-function MainApp() {
+function MainApp({ onLoginClick }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [messages, setMessages] = useState([]); // Persistent chat history session
   const [connected, setConnected] = useState(socket?.connected || false);
@@ -162,7 +162,7 @@ function MainApp() {
   return (
     // FIX: overflow-hidden on root prevents any child from leaking outside viewport width
     <div className="h-screen flex flex-col bg-theme-page text-theme-primary selection:bg-accent-blue/20 overflow-hidden font-sans">
-      <Header connected={connected} />
+      <Header connected={connected} onLoginClick={onLoginClick} />
       <TabNav activeTab={activeTab} setActiveTab={setActiveTab} alertCount={alertCount} hasCriticalZone={hasCriticalZone} />
       {/*
         FIX: Added overflow-x-hidden explicitly.
@@ -182,7 +182,7 @@ function MainApp() {
               {activeTab === 'overview' && <OverviewPage />}
               {activeTab === 'crowd' && <CrowdPage />}
               {activeTab === 'gates' && <GatesPage />}
-              {activeTab === 'alerts' && <AlertsPage />}
+              {activeTab === 'alerts' && <AlertsPage alerts={alerts} />}
               {activeTab === 'assistant' && <AssistantPage messages={messages} setMessages={setMessages} />}
               {activeTab === 'map' && <MapPage />}
             </motion.div>
@@ -197,31 +197,11 @@ function MainApp() {
 function AppShell() {
   const { step, setStep, setSelectedVenue, setSelectedDestination, resetOnboarding } = useOnboarding();
   const { token } = useAuth();
+  const [showLogin, setShowLogin] = useState(false);
 
-  const handleRefresh = async () => {
-    try {
-      // 1. Sync with backend to wipe simulation state
-      await fetch('/api/internal/reset', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      // 2. Clear local state
-      resetOnboarding();
-      localStorage.removeItem('venueflow_token');
-      // 3. Reload
-      window.location.reload();
-    } catch (err) {
-      console.error("Refresh sequence failed:", err);
-      // Fallback reload if backend connectivity issues occur
-      window.location.reload();
-    }
-  };
 
   return (
-    <PullToRefresh onRefresh={handleRefresh}>
+    <>
       {step === 'venue' && <BackgroundAtmosphere />}
       {/* FIX: overflow-hidden here also prevents the modals from
           accidentally creating horizontal bleed during animations */}
@@ -246,22 +226,34 @@ function AppShell() {
         </AnimatePresence>
         <motion.div
           key="mainapp"
-          initial={{ opacity: 0 }} animate={{ opacity: step === 'done' ? 1 : 0 }} transition={{ duration: 0.8 }} className="w-full h-full relative z-10"
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: step === 'done' ? 1 : 0 }} 
+          transition={{ duration: 0.8 }} 
+          className="w-full h-full relative z-10"
           style={{ pointerEvents: step === 'done' ? 'auto' : 'none' }}>
-          <MainApp />
+          {step === 'done' && <MainApp onLoginClick={() => setShowLogin(true)} />}
         </motion.div>
+
+        {/* Login Overlay */}
+        <AnimatePresence>
+          {showLogin && (
+            <motion.div 
+              style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 1.1 }}
+              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+            >
+              <LoginPage onClose={() => setShowLogin(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </PullToRefresh>
+    </>
   );
 }
 
 function RootRouter() {
-  const { token } = useAuth();
-  
-  if (!token) {
-    return <LoginPage />;
-  }
-
   return (
     <OnboardingProvider>
       <AppShell />

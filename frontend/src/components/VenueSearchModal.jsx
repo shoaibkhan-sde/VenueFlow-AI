@@ -21,7 +21,7 @@ const TEAM_META = {
 };
 
 // ─── Stadium Card ─────────────────────────────────────────────────────────────
-function StadiumCard({ stadium, isSelected, onClick, index }) {
+const StadiumCard = React.memo(({ stadium, isSelected, onClick, index }) => {
   const meta = TEAM_META[stadium.id] || { abbr: '●', color: '#64748b', bg: '#f1f5f9' };
 
   return (
@@ -29,7 +29,7 @@ function StadiumCard({ stadium, isSelected, onClick, index }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
-      transition={{ delay: index * 0.03, duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ delay: index * 0.02, duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
       whileHover={{ y: -2, transition: { duration: 0.15 } }}
       whileTap={{ scale: 0.97 }}
       onClick={onClick}
@@ -90,7 +90,7 @@ function StadiumCard({ stadium, isSelected, onClick, index }) {
       </div>
     </motion.button>
   );
-}
+});
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function VenueSearchModal({ onSelect }) {

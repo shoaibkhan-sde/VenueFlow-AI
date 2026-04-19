@@ -3,8 +3,9 @@ import AlertFeed from '../components/AlertFeed';
 import { useAlerts } from '../hooks/useAlerts';
 import { Activity } from 'lucide-react';
 
-export default function AlertsPage() {
-  const allAlerts = useAlerts(10);
+export default function AlertsPage({ alerts: allAlertsRaw = [] }) {
+  // Enforce strict limit of 10 in UI
+  const allAlerts = useMemo(() => allAlertsRaw.slice(0, 10), [allAlertsRaw]);
   const [filter, setFilter] = useState('all');
 
   const filteredAlerts = useMemo(() => {

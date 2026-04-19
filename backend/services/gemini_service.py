@@ -997,7 +997,7 @@ def _resp_food_wait(zones, gates) -> Dict[str, Any]:
     safety = _get_safety_footnote(zones)
 
     if food_zones:
-        lines = ["⏱️ **Live Queue Status — All Food Hubs:**\n"]
+        lines = ["⏱️ **Live Line Status — All Food Hubs:**\n"]
         for z in food_zones:
             d    = getattr(z, "density", 0.5)
             wt   = getattr(z, "wait_time", _estimate_wait_time(d))
@@ -1012,7 +1012,7 @@ def _resp_food_wait(zones, gates) -> Dict[str, Any]:
         text = "\n".join(lines)
     else:
         text = (
-            "⏱️ **Live Queue Status:**\n"
+            "⏱️ **Live Line Status:**\n"
             "• 🟢 South Food Hub — ~2 min wait ✅ *(Recommended)*\n"
             "• 🟡 North Food Hub — ~8 min wait\n"
             "• 🟠 East Food Hub  — ~12 min wait\n\n"
@@ -1056,7 +1056,7 @@ def _resp_food_general(zones, gates) -> Dict[str, Any]:
     return {
         "text": (
             f"🍔 **{best_name} is your best food option right now.**\n"
-            f"Queue is {_density_label(best_d).lower()} — "
+            f"Line is {_density_label(best_d).lower()} — "
             f"estimated {_estimate_wait_time(best_d)} wait. "
             f"{worst_name} is significantly busier, so skip that one for now.\n\n"
             "What would you like to do?"
@@ -1150,7 +1150,7 @@ def _resp_gate_general(zones, gates) -> Dict[str, Any]:
         text = (
             "🚪 **Gate Analysis:**\n"
             "• Gate 4 & 5 — Seamless Entry · zero wait 🟢\n"
-            "• Gate 2 & 3 — Light queue · ~3 min wait 🟡\n"
+            "• Gate 2 & 3 — Light line · ~3 min wait 🟡\n"
             "• Gate 1 (North) — Peak surge · Avoid 🔴\n\n"
             "**Gate 4 is your best bet right now.**"
         )
@@ -1234,7 +1234,7 @@ def _resp_greeting(zones, gates) -> Dict[str, Any]:
             "zone, food hub, and crowd density right now.\n\n"
             f"⚡ **Live Snapshot:**\n"
             f"• Fastest gate: **{best_gate}**\n"
-            f"• Shortest food queue: **{best_food_name}**\n"
+            f"• Shortest food line: **{best_food_name}**\n"
             f"• {len([z for z in zones if getattr(z,'density',0) > DENSITY_HIGH])} "
             "zone(s) at critical load — I'll keep you clear of those.\n\n"
             "**How can I make your experience better today?**"
@@ -1254,7 +1254,7 @@ def _resp_fallback(zones, gates) -> Dict[str, Any]:
             "I'm here to help with anything inside the venue! 🏟️\n\n"
             "Try asking me about:\n"
             "• **Gates** — fastest entry/exit right now\n"
-            "• **Food** — shortest queue, menus, directions\n"
+            "• **Food** — shortest line, menus, directions\n"
             "• **Restrooms** — nearest and least crowded\n"
             "• **Parking** — zone availability and exit strategy\n"
             "• **Charging** — phone charging station locations\n"
@@ -1449,7 +1449,7 @@ def _handle_context_redirect(user_message: str) -> Dict[str, Any]:
             text = (
                 "🚪 **Gate Intelligence — Dashboard Redirect**\n\n"
                 "• Gate 4 & 5 — Seamless · zero wait 🟢\n"
-                "• Gate 2 & 3 — Light queue 🟡\n"
+                "• Gate 2 & 3 — Light line 🟡\n"
                 "• Gate 1     — Surge · Avoid 🔴"
             )
         return {
@@ -1499,7 +1499,7 @@ def _handle_context_redirect(user_message: str) -> Dict[str, Any]:
         ) + tip + safety,
         "options": [
             "🚪 Find Best Gate", "🗺️ Venue Map",
-            "⏱️ Queue Status", "📍 Get Directions"
+            "⏱️ Line Status", "📍 Get Directions"
         ]
     }
 
@@ -1689,20 +1689,6 @@ def chat(
         except Exception as exc:
             logger.error("Gemini call failed: %s", exc)
             result = _get_mock_response(user_message)
-
-    # ── Phase 4: Aesthetic Delay (Pre-return) ────────────────────────────────
-    is_urgent = (
-        _check_intent(user_message, INTENT_KEYWORDS["emergency"])
-        or _check_intent(user_message, INTENT_KEYWORDS["fire"])
-        or _check_intent(user_message, INTENT_KEYWORDS["medical"])
-    )
-
-    if not is_urgent:
-        elapsed = time.monotonic() - start_time
-        if elapsed < CHAT_MIN_DELAY:
-            sleep_time = CHAT_MIN_DELAY - elapsed
-            logger.debug("Applying aesthetic delay of %.3fs", sleep_time)
-            time.sleep(sleep_time)
 
     logger.debug("chat() resolved in %.3fs", time.monotonic() - start_time)
     return result
