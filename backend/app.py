@@ -1,15 +1,10 @@
-"""
-VenueFlow AI — Flask Application Factory
-"""
-
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch(socket=True, select=True, thread=True)
 
 import sys
 import os
 import threading
 import uuid
-import logging
 from flask import Flask, jsonify, send_from_directory, g
 from flask_cors import CORS
 from flask_talisman import Talisman
@@ -78,9 +73,12 @@ def create_app(testing: bool = False) -> Flask:
         'font-src': ["'self'", 'https://fonts.gstatic.com']
     }
     
-    Talisman(app, 
+    # Initialize Talisman globally. We disable force_https at the Flask level 
+    # because Cloud Run's load balancer handles SSL termination and internal 
+    # health checks (HTTP) must reach the container without a 301 redirect.
+    talisman = Talisman(app, 
              content_security_policy=csp, 
-             force_https=not Config.DEVELOPMENT_MODE,
+             force_https=False,
              session_cookie_secure=not Config.DEVELOPMENT_MODE,
              session_cookie_http_only=True,
              frame_options='DENY')
@@ -107,17 +105,17 @@ def create_app(testing: bool = False) -> Flask:
             return send_from_directory(app.static_folder, path)
         return send_from_directory(app.static_folder, 'index.html')
 
-    # ── Fast Health Check (Resolution for 503) ───────────────
+    # ── Fast Health Check (Standalone HTTP Resilience) ───────
     @app.route("/api/health")
     def health():
-        return jsonify({"status": "healthy", "pod": os.environ.get("HOSTNAME", "unknown")})
+        return jsonify({"status": "healthy"}), 200
 
     socketio.init_app(app, async_mode='eventlet', cors_allowed_origins="*")
     import api.sockets 
 
     # ── Startup Orchestration ────────────────────────────────
     if not testing:
-        # Launch preloading in background so web server can bind instantly
+        # Launch preloading in background via Greenthread-safe Threading
         threading.Thread(target=_background_preloading, args=(app,), daemon=True).start()
 
     return app

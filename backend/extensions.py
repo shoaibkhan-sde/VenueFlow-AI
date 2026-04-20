@@ -16,5 +16,5 @@ use_broker = os.getenv("USE_REDIS_BROKER", "false").lower() == "true"
 socketio = SocketIO(
     cors_allowed_origins="*",
     message_queue=Config.REDIS_URL if use_broker else None,
-    async_mode='threading'
+    async_mode=None
 )

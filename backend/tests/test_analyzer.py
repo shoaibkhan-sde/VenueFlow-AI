@@ -21,7 +21,10 @@ def test_find_fastest_gate_basic(sample_gates):
     
     assert len(results) == 2
     assert results[0].gate.gate_id == "gate-1"
-    assert results[0].estimated_wait_seconds == 10.0
+    # Live wait: 10/2 = 5.0s
+    assert results[0].estimated_wait_seconds == 5.0
+    # Composite (Wait[0] + Dist[5]): 5.0
+    assert results[0].composite_score == 5.0
 
 def test_find_fastest_gate_empty_lists():
     """Verify resilience against empty data."""
