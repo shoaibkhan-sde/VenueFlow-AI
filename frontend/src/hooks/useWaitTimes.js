@@ -20,8 +20,9 @@ export function useWaitTimes() {
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     // Initial fetch just to populate immediately if socket takes a second
+    const safetyTimeout = 5000;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), safetyTimeout);
 
     fetch('/api/crowd', { headers, signal: controller.signal })
       .then((res) => {

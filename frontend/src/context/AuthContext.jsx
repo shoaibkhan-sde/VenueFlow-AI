@@ -14,10 +14,10 @@ export function AuthProvider({ children }) {
     // we force render after 3s to allow Guest access.
     const safetyTimer = setTimeout(() => {
       if (loading) {
-        console.warn("[AUTH] Safety timeout reached - Force rendering Guest UI.");
+        console.warn("[AUTH] Production safety timeout (5s) reached - Rendering Guest UI.");
         setLoading(false);
       }
-    }, 3000);
+    }, 5000);
 
     if (!isFirebaseEnabled || !auth) {
       setLoading(false);

@@ -16,9 +16,9 @@ export function useCrowdData() {
   useEffect(() => {
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-    // Initial fetch to populate immediately
+    const safetyTimeout = 5000;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), safetyTimeout);
 
     Promise.all([
       fetch('/api/gates', { headers, signal: controller.signal }),

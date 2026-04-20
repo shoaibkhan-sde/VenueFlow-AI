@@ -22,28 +22,34 @@ from api.routes_config import config_bp
 
 def _background_preloading(app):
     """
-    Perform I/O-heavy initialization using eventlet green threads to prevent 
-    Cloud Run startup deadlocks.
+    Perform I/O-heavy initialization using eventlet green threads.
+    Wrapped in a 15s timeout to prevent boot deadlocks.
     """
+    import eventlet.timeout
     with app.app_context():
-        try:
-            from services.redis_service import init_redis_data, sync_state_to_cloud
-            from services.simulation_service import start_simulation
-            from services.alert_service import purge_old_history
+        # Safety timeout: if I/O hangs, don't kill the boot sequence
+        with eventlet.timeout.Timeout(15, False):
+            try:
+                from services.redis_service import init_redis_data, sync_state_to_cloud
+                from services.simulation_service import start_simulation
+                from services.alert_service import purge_old_history
 
-            # 1. Warmup Redis (Fast)
-            init_redis_data()
-            
-            # 2. Sync to Cloud (Heavy)
-            sync_state_to_cloud()
-            
-            # 3. Start Background Tasks
-            start_simulation(app)
-            purge_old_history()
-            
-            app.logger.info("Production Preloading Complete.")
-        except Exception as e:
-            app.logger.error(f"Preloading Failed: {e}")
+                print("[BOOT] Primary Redis warmup starting...", flush=True)
+                init_redis_data()
+                
+                print("[BOOT] Syncing state to cloud persistence...", flush=True)
+                sync_state_to_cloud()
+                
+                print("[BOOT] Starting simulation & background workers...", flush=True)
+                start_simulation(app)
+                purge_old_history()
+                
+                print("[BOOT] Production Preloading: SUCCESS.", flush=True)
+            except Exception as e:
+                print(f"[BOOT_ERROR] Background preload failed (non-fatal): {e}", flush=True)
+        
+        # If the timeout was hit, 'False' was returned and we logic out here
+        print("[BOOT] Boot sequence finalized.", flush=True)
 
 def create_app(testing: bool = False) -> Flask:
     # Use absolute path for static_folder to ensure resolution in Cloud Run
@@ -150,14 +156,9 @@ def create_app(testing: bool = False) -> Flask:
     import api.sockets 
 
     if not testing:
-        # Greenthrread-safe spawn for preloading
+        # Greenthread-safe spawn for preloading
+        print("[BOOT] Spawning production preloader...", flush=True)
         eventlet.spawn(_background_preloading, app)
-    import api.sockets 
-
-    # ── Startup Orchestration ────────────────────────────────
-    if not testing:
-        # Launch preloading in background via Greenthread-safe Threading
-        threading.Thread(target=_background_preloading, args=(app,), daemon=True).start()
 
     return app
 
