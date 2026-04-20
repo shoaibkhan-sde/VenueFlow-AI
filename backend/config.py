@@ -16,7 +16,7 @@ class Config:
     # ── Gemini AI ────────────────────────────────────────────
     GEMINI_API_KEY: str = os.environ.get("GOOGLE_API_KEY", "")
     GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-    DEVELOPMENT_MODE: bool = os.environ.get("FLASK_ENV", "development") == "development"
+    DEVELOPMENT_MODE: bool = os.environ.get("FLASK_ENV", "development").lower() in ["development", "testing"]
 
     # ── Redis ────────────────────────────────────────────────
     REDIS_URL: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")

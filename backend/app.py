@@ -33,6 +33,7 @@ from services.simulation_service import start_simulation
 def create_app(testing: bool = False) -> Flask:
     # Set static_folder to 'static' (where Stage 1 of Dockerfile puts React build)
     app = Flask(__name__, static_folder='static', static_url_path='')
+    app.url_map.strict_slashes = False
     
     app.config.from_mapping(
         SECRET_KEY=Config.SECRET_KEY,
