@@ -40,7 +40,7 @@ class AuditLogger:
         request_id = getattr(g, 'request_id', request.headers.get("X-Request-ID", str(uuid.uuid4())))
         
         audit_entry = {
-            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "request_id": request_id,
             "event_type": event_type,
             "status": status,
