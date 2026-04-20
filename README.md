@@ -1,10 +1,5 @@
 # VenueFlow AI — Real-Time Crowd Intelligence
 
-[![Tests](https://img.shields.io/badge/Tests-11%20Passed-emerald?style=for-the-badge&logo=pytest)](file:///backend/tests)
-[![Security](https://img.shields.io/badge/Security-Hardened-blue?style=for-the-badge&logo=google-cloud)](file:///backend/api/routes_auth.py)
-[![Accuracy](https://img.shields.io/badge/AI-Gemini%202.0%20Flash-orange?style=for-the-badge&logo=google-gemini)](file:///backend/services/gemini_service.py)
-[![Accessibility](https://img.shields.io/badge/A11y-Lighthouse%20100-success?style=for-the-badge&logo=accessibility)](file:///frontend/src/index.css)
-
 > Real-time crowd intelligence and AI-assisted fan experience for large-scale sporting venues (100k+ capacity). Built for the **Google Build with AI** program.
 
 ---
