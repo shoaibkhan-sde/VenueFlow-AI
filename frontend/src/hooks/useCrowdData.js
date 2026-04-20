@@ -17,11 +17,15 @@ export function useCrowdData() {
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     // Initial fetch to populate immediately
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     Promise.all([
-      fetch('/api/gates', { headers }),
-      fetch('/api/gates/optimal?top_k=10', { headers })
+      fetch('/api/gates', { headers, signal: controller.signal }),
+      fetch('/api/gates/optimal?top_k=10', { headers, signal: controller.signal })
     ])
       .then(async ([gatesRes, optimalRes]) => {
+        clearTimeout(timeoutId);
         const gatesJson = await gatesRes.json();
         const optimalJson = await optimalRes.json();
         setGates(gatesJson.gates || []);
@@ -29,8 +33,9 @@ export function useCrowdData() {
         setLoading(false);
       })
       .catch((err) => {
-        console.error(err);
-        setError(err.message);
+        clearTimeout(timeoutId);
+        console.error("[useCrowdData] Parallel fetch error or timeout:", err);
+        setError(err.name === 'AbortError' ? 'Request timed out' : err.message);
         setLoading(false);
       });
 

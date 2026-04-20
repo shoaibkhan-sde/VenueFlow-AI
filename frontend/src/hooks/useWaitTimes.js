@@ -20,15 +20,22 @@ export function useWaitTimes() {
     const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
     // Initial fetch just to populate immediately if socket takes a second
-    fetch('/api/crowd', { headers })
-      .then((res) => res.json())
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    fetch('/api/crowd', { headers, signal: controller.signal })
+      .then((res) => {
+        clearTimeout(timeoutId);
+        return res.json();
+      })
       .then((json) => {
         setData(json);
         setLoading(false);
       })
       .catch((err) => {
-        console.error(err);
-        setError(err.message);
+        clearTimeout(timeoutId);
+        console.error("[useWaitTimes] Fetch error or timeout:", err);
+        setError(err.name === 'AbortError' ? 'Request timed out' : err.message);
         setLoading(false);
       });
 

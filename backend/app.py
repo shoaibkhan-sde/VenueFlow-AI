@@ -1,11 +1,10 @@
 import eventlet
-eventlet.monkey_patch(socket=True, select=True, thread=True)
+eventlet.monkey_patch()
 
 import sys
 import os
-import threading
 import uuid
-from flask import Flask, jsonify, send_from_directory, g
+from flask import Flask, jsonify, send_from_directory, g, Blueprint, request
 from flask_cors import CORS
 from flask_talisman import Talisman
 
@@ -23,8 +22,8 @@ from api.routes_config import config_bp
 
 def _background_preloading(app):
     """
-    Perform I/O-heavy initialization in a background thread to prevent 
-    Cloud Run startup timeouts (503).
+    Perform I/O-heavy initialization using eventlet green threads to prevent 
+    Cloud Run startup deadlocks.
     """
     with app.app_context():
         try:
@@ -42,16 +41,22 @@ def _background_preloading(app):
             start_simulation(app)
             purge_old_history()
             
-            app.logger.info("Production Preloading Complete (Success).")
+            app.logger.info("Production Preloading Complete.")
         except Exception as e:
-            app.logger.error(f"Background Preloading Failed (Non-Fatal): {e}")
+            app.logger.error(f"Preloading Failed: {e}")
 
 def create_app(testing: bool = False) -> Flask:
     # Use absolute path for static_folder to ensure resolution in Cloud Run
+    # --- Absolute Path Validation for Cloud Run Resilience ---
     base_dir = os.path.dirname(os.path.abspath(__file__))
     static_dir = os.path.join(base_dir, 'static')
     
-    app = Flask(__name__, static_folder=static_dir, static_url_path='/')
+    # Critical: Verify static directory exists at boot
+    if not os.path.isdir(static_dir):
+        print(f"[CRITICAL] Static directory missing! Expected at: {static_dir}", flush=True)
+        # We don't crash the container, but health checks will fail if assets are missing
+    
+    app = Flask(__name__, static_folder=static_dir, static_url_path='/static')
     app.url_map.strict_slashes = False
     
     app.config.from_mapping(
@@ -63,7 +68,6 @@ def create_app(testing: bool = False) -> Flask:
     CORS(app, origins=Config.CORS_ORIGINS)
 
     # ── Security Hardening (Talisman) ───────────────────────
-    # Expansion for MapLibre/Firebase requirements in production
     csp = {
         'default-src': ["'self'"],
         'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', 'https://*.googleapis.com', 'https://*.firebaseapp.com', 'https://apis.google.com'],
@@ -72,10 +76,9 @@ def create_app(testing: bool = False) -> Flask:
         'img-src': ["'self'", 'data:', 'blob:', 'https://*.googleapis.com', 'https://*.maptiler.com'],
         'connect-src': ["'self'", 'ws://localhost:*', 'wss://*.cloudrun.app', 'https://*.cloudrun.app', 'https://*.googleapis.com', 'https://*.firebaseio.com', 'https://*.maptiler.com'],
         'font-src': ["'self'", 'https://fonts.gstatic.com'],
-        'frame-src': ["'self'", 'https://*.firebaseapp.com', 'https://apis.google.com', 'https://venueflow-ai-493715.firebaseapp.com/']
+        'frame-src': ["'self'", 'https://*.firebaseapp.com', 'https://apis.google.com']
     }
     
-    # Initialize Talisman globally.
     talisman = Talisman(app, 
              content_security_policy=csp, 
              force_https=False,
@@ -97,26 +100,58 @@ def create_app(testing: bool = False) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(config_bp)
 
-    # ── Final SPA Architecture (Surgical 404 Fallback) ───────
-    @app.errorhandler(404)
-    def handle_404(e):
+    # ── Elite Asset Handler (100% MIME Purity) ───────────────
+    # We serve static files via a blueprint to ensure Flask's native
+    # MIME-type inference works perfectly without catch-all overlap.
+    static_bp = Blueprint('assets', __name__, static_folder=static_dir, static_url_path='/')
+    
+    @static_bp.route('/', defaults={'path': ''})
+    @static_bp.route('/<path:path>')
+    def serve_static(path):
         """
-        Industry-standard SPA fallback:
-        - If the request is for a file (has an extension like .js, .css), return 404.
-        - This prevents the browser from trying to parse HTML as JS (White Screen Fix).
-        - Otherwise, serve index.html to allow React to handle the route.
+        Universal file provider with fallback to index.html for SPA routes.
+        This resolves both Asset 404s and White Screen MIME errors.
         """
-        path = request.path
-        if "." in path.split("/")[-1] and not path.endswith(".html"):
-            return jsonify({"error": "File not found"}), 404
-        return send_from_directory(app.static_folder, 'index.html')
+        # Block API fallbacks in this route
+        if path.startswith("api/"):
+            return jsonify({"error": "API route not found"}), 404
 
-    # ── Fast Health Check (Standalone HTTP Resilience) ───────
+        # 1. Try serving from root or assets subdirectory
+        target_path = path if path else 'index.html'
+        full_path = os.path.join(static_bp.static_folder, target_path)
+        
+        if os.path.isfile(full_path):
+            return send_from_directory(static_bp.static_folder, target_path)
+            
+        # 2. Check if it's an asset in the subdirectory
+        asset_full_path = os.path.join(static_bp.static_folder, 'assets', path)
+        if os.path.isfile(asset_full_path):
+            return send_from_directory(os.path.join(static_bp.static_folder, 'assets'), path)
+
+        # 3. SPA Fallback (No dots in path means it's a UI route like /dashboard)
+        if "." not in path.split("/")[-1]:
+            return send_from_directory(static_bp.static_folder, 'index.html')
+
+        return "Asset not found", 404
+
+    app.register_blueprint(static_bp)
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        import traceback
+        print(f"[INTERNAL_ERROR] {e}\n{traceback.format_exc()}", flush=True)
+        return jsonify({"error": "Internal Server Error"}), 500
+
     @app.route("/api/health")
     def health():
         return jsonify({"status": "healthy"}), 200
 
     socketio.init_app(app, async_mode='eventlet', cors_allowed_origins="*")
+    import api.sockets 
+
+    if not testing:
+        # Greenthrread-safe spawn for preloading
+        eventlet.spawn(_background_preloading, app)
     import api.sockets 
 
     # ── Startup Orchestration ────────────────────────────────
