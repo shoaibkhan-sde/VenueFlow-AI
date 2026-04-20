@@ -49,14 +49,17 @@ def create_app(testing: bool = False) -> Flask:
         'default-src': "'self'",
         'script-src': [
             "'self'",
-            "'unsafe-inline'", # React 19/Vite dev mode compatibility
+            "'unsafe-inline'",
+            "'unsafe-eval'",
+            'blob:',
             'https://maps.googleapis.com',
             'https://*.firebaseapp.com',
             'https://*.googleapis.com'
         ],
+        'worker-src': ["'self'", 'blob:'],
         'style-src': [
             "'self'",
-            "'unsafe-inline'", # Tailwind CSS compatibility
+            "'unsafe-inline'",
             'https://fonts.googleapis.com',
             'https://*.googleapis.com'
         ],
@@ -65,14 +68,15 @@ def create_app(testing: bool = False) -> Flask:
             'data:', 
             'https://maps.gstatic.com',
             'https://*.googleapis.com',
-            'https://*.maptiler.com' # Temporary until migration complete
+            'https://*.maptiler.com'
         ],
         'connect-src': [
             "'self'",
-            'ws://localhost:*', # Development sockets
+            'ws://localhost:*',
             'wss://*.cloudfunctions.net',
             'https://*.googleapis.com',
-            'https://*.firebaseio.com'
+            'https://*.firebaseio.com',
+            'https://*.maptiler.com'  # FINAL FIX: Allow MapLibre style/tile fetches
         ],
         'font-src': ["'self'", 'https://fonts.gstatic.com']
     }

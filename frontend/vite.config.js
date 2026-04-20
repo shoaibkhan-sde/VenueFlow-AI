@@ -21,10 +21,16 @@ export default defineConfig({
     },
   },
   build: {
-    chunkSizeWarningLimit: 1000, // Silence the chunks warning as requested
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes('maplibre-gl')) {
+            return 'maplibre';
+          }
+          if (id.includes('firebase')) {
+            return 'firebase';
+          }
           if (id.includes('node_modules')) {
             return 'vendor';
           }
