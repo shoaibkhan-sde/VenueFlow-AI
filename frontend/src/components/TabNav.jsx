@@ -13,9 +13,9 @@ const TABS = [
 
 export default function TabNav({ activeTab, setActiveTab, alertCount = 0, hasCriticalZone = false }) {
   return (
-    <nav className="relative z-40 shrink-0 w-full overflow-x-hidden backdrop-blur-xl bg-theme-card/80 border-b border-theme-main transition-all duration-500">
+    <nav className="relative z-40 shrink-0 w-full overflow-x-hidden backdrop-blur-xl bg-theme-card/80 border-b border-theme-main transition-all duration-500" aria-label="Main Navigation">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-8 overflow-x-auto no-scrollbar overscroll-x-contain">
-        <div className="flex items-center h-[64px] sm:h-[72px] gap-1 sm:gap-3 lg:gap-6 xl:gap-8 min-w-max">
+        <div className="flex items-center h-[64px] sm:h-[72px] gap-1 sm:gap-3 lg:gap-6 xl:gap-8 min-w-max" role="tablist">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
 
@@ -23,21 +23,21 @@ export default function TabNav({ activeTab, setActiveTab, alertCount = 0, hasCri
             let badge = null;
             if (tab.id === 'alerts' && alertCount > 0) {
               badge = (
-                <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 z-30">
+                <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 z-30" aria-hidden="true">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600 border-[1.5px] border-theme-page" />
                 </span>
               );
             } else if (tab.id === 'crowd') {
               badge = (
-                <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 z-30">
+                <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 z-30" aria-hidden="true">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 border-[1.5px] border-theme-page" />
                 </span>
               );
             } else if (tab.id === 'assistant') {
               badge = (
-                <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 z-30">
+                <span className="absolute -top-1 -right-1.5 flex h-2.5 w-2.5 z-30" aria-hidden="true">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border-[1.5px] border-theme-page" />
                 </span>
@@ -47,6 +47,9 @@ export default function TabNav({ activeTab, setActiveTab, alertCount = 0, hasCri
             return (
               <motion.button
                 key={tab.id}
+                role="tab"
+                aria-selected={isActive}
+                aria-label={tab.label}
                 onClick={() => setActiveTab(tab.id)}
                 whileTap={{ scale: 0.96 }}
                 className={`cursor-pointer relative h-full px-4 py-3 sm:px-6 flex items-center gap-3 transition-all duration-300 group

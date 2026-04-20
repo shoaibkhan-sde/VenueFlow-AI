@@ -89,6 +89,9 @@ def generate_payload(zones, gates, tick_count):
 
 def simulation_loop(app):
     """Background loop that executes tick every X seconds."""
+    # Grace period to ensure GThread workers and SocketIO are fully bound
+    time.sleep(2)
+    
     zones = [dict(z) for z in ZONES_META]
     gates = [dict(g) for g in GATES_META]
     tick_count = 0

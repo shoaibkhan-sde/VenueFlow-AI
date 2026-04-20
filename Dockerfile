@@ -50,8 +50,6 @@ ENV PORT=8080
 # Cloud Run expects the app to listen on the port defined by $PORT
 EXPOSE 8080
 
-# Run the app with Gunicorn and Eventlet for Socket.IO support
-# -w 1 is recommended for Socket.IO on Cloud Run to avoid state conflicts
-# without a central Message Queue (Redis) configured.
-# Using shell form to support $PORT expansion
-CMD gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT app:app
+# Run the app with the modern 'gthread' worker class.
+# We use /dev/shm and gthread for stable, non-blocking I/O on Cloud Run.
+CMD gunicorn --worker-class gthread -w 1 --threads 8 --timeout 120 --worker-tmp-dir /dev/shm --bind 0.0.0.0:$PORT app:app

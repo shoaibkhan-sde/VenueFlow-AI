@@ -8,6 +8,7 @@ import json
 import os
 from config import Config
 from core.models import Gate, Zone
+from services.firebase_service import get_db, is_firebase_active
 
 # Initialize Redis client with tight timeouts
 redis_client = redis.from_url(
@@ -54,8 +55,35 @@ _local_event_phase = "Normal"
 
 PERSISTENCE_FILE = os.path.join(os.path.dirname(__file__), "..", "persistence.json")
 
+def _save_to_firestore():
+    """Secondary cloud persistence: Sync local state to Firestore."""
+    if not is_firebase_active():
+        return
+    db = get_db()
+    try:
+        # Sync Zones
+        for zid, z in _local_zones_dict.items():
+            db.collection("zones").document(zid).set({
+                "zone_id": z.zone_id, "name": z.name, "capacity": z.capacity,
+                "latitude": z.latitude, "longitude": z.longitude,
+                "current_occupancy": z.current_occupancy,
+                "peak_occupancy": z.peak_occupancy
+            })
+        # Sync Gates
+        for gid, g in _local_gates_dict.items():
+            db.collection("gates").document(gid).set({
+                "gate_id": g.gate_id, "name": g.name, "zone": g.zone,
+                "latitude": g.latitude, "longitude": g.longitude,
+                "capacity": g.capacity, "current_queue": g.current_queue,
+                "throughput_rate": g.throughput_rate, "is_open": g.is_open
+            })
+        # Sync Event Phase
+        db.collection("config").document("stadium").set({"event_phase": _local_event_phase}, merge=True)
+    except Exception as e:
+        print(f"[DEBUG] Firestore Sync Error: {e}")
+
 def _save_local_to_disk():
-    """Fallback persistence: Save local cache to JSON if Redis is down."""
+    """Fallback persistence: Save local cache to JSON and Firestore."""
     try:
         data = {
             "zones": {zid: {
@@ -73,12 +101,82 @@ def _save_local_to_disk():
         }
         with open(PERSISTENCE_FILE, "w") as f:
             json.dump(data, f, indent=2)
+        
+        # Also attempt cloud sync
+        _save_to_firestore()
     except Exception as e:
         print(f"[DEBUG] Could not save persistence file: {e}")
 
+def _safe_zone_from_dict(d: dict) -> Zone:
+    """Safely reconstruct a Zone from a dict with defaults for missing elite fields."""
+    return Zone(
+        zone_id=d.get("zone_id", "unknown"),
+        name=d.get("name", "Unknown Zone"),
+        capacity=int(d.get("capacity", 25000)),
+        latitude=float(d.get("latitude", 0.0)),
+        longitude=float(d.get("longitude", 0.0)),
+        level=int(d.get("level", 1)),
+        current_occupancy=int(d.get("current_occupancy", 0)),
+        peak_occupancy=int(d.get("peak_occupancy", 0))
+    )
+
+def _safe_gate_from_dict(d: dict) -> Gate:
+    """Safely reconstruct a Gate from a dict with defaults for missing elite fields."""
+    return Gate(
+        gate_id=d.get("gate_id", "unknown"),
+        name=d.get("name", "Unknown Gate"),
+        zone=d.get("zone", "unknown"),
+        latitude=float(d.get("latitude", 0.0)),
+        longitude=float(d.get("longitude", 0.0)),
+        capacity=int(d.get("capacity", 500)),
+        level=int(d.get("level", 1)),
+        current_queue=int(d.get("current_queue", 0)),
+        throughput_rate=float(d.get("throughput_rate", 1.0)),
+        is_open=(d.get("is_open", "True") == "True" or d.get("is_open") is True)
+    )
+
+def _load_from_firestore():
+    """Attempt to pull the latest truth from Firestore."""
+    if not is_firebase_active():
+        return False
+    db = get_db()
+    try:
+        # 1. Load Zones
+        docs = db.collection("zones").get()
+        if docs:
+            for doc in docs:
+                data = doc.to_dict()
+                _local_zones_dict[doc.id] = _safe_zone_from_dict(data)
+        
+        # 2. Load Gates
+        docs = db.collection("gates").get()
+        if docs:
+            for doc in docs:
+                data = doc.to_dict()
+                _local_gates_dict[doc.id] = _safe_gate_from_dict(data)
+            
+        # 3. Load Event Phase
+        conf = db.collection("config").document("stadium").get()
+        if conf.exists:
+            global _local_event_phase
+            _local_event_phase = conf.to_dict().get("event_phase", "Normal")
+        
+        print("[OK] State synchronized from Firestore")
+        return True
+    except Exception as e:
+        print(f"[DEBUG] Firestore Load Error (falling back): {e}")
+        return False
+
 def _load_local_from_disk():
-    """Fallback persistence: Load local cache from JSON on startup."""
+    """Fallback persistence: Load local cache from Firestore (preferred) or JSON."""
     global _local_event_phase
+    
+    # Priority 1: Firestore (Global Truth)
+    if _load_from_firestore():
+        print("[OK] Loaded state from Firestore")
+        return
+
+    # Priority 2: Local JSON (Legacy Fallback)
     if not os.path.exists(PERSISTENCE_FILE):
         return
     try:
@@ -92,11 +190,12 @@ def _load_local_from_disk():
             _local_gates_dict[gid] = Gate(**val)
             
         _local_event_phase = data.get("event_phase", "Normal")
+        print("[OK] Loaded state from persistence.json")
     except Exception as e:
         print(f"[DEBUG] Could not load persistence file: {e}")
 
 def init_redis_data():
-    """Seed redis if empty and synchronize names to current nomenclature."""
+    """Seed redis if empty and synchronize names to current nomenclature (Fast)."""
     global REDIS_UP
     if not REDIS_UP:
         return
@@ -104,7 +203,7 @@ def init_redis_data():
         # 1. Standard Zone Sync (Name Correction)
         for z in DEFAULT_ZONES:
             if not redis_client.exists(f"{ZONE_PREFIX}{z.zone_id}"):
-                set_zone(z)
+                set_zone(z, sync_to_cloud=False)
             else:
                 # Key exists - force update name/capacity to match nomenclature
                 redis_client.hset(f"{ZONE_PREFIX}{z.zone_id}", mapping={
@@ -115,7 +214,7 @@ def init_redis_data():
         # 2. Gate Sync (Name & Zone Correction)
         for g in DEFAULT_GATES:
             if not redis_client.exists(f"{GATE_PREFIX}{g.gate_id}"):
-                set_gate(g)
+                set_gate(g, sync_to_cloud=False)
             else:
                 redis_client.hset(f"{GATE_PREFIX}{g.gate_id}", mapping={
                     "name": g.name,
@@ -126,10 +225,23 @@ def init_redis_data():
             redis_client.set(EVENT_PHASE_KEY, "Normal")
             
         print("[OK] Redis Nomenclature Sync Complete")
-    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
+    except Exception as e:
         REDIS_UP = False
-        print("[INFO] Redis not detected. Using local JSON persistence fallback.")
+        print(f"[INFO] State initialization encountered an error: {e}. Falling back to persistence.")
         _load_local_from_disk()
+
+def sync_state_to_cloud():
+    """
+    Heavy lifting: Synchronizes the final state of all objects to Firestore.
+    Designed to run in a background thread to prevent startup timeouts (503).
+    """
+    print("[INIT] Background Cloud Sync Started...")
+    try:
+        # Batch write logic or sequential sync
+        _save_to_firestore()
+        print("[OK] Background Cloud Sync Complete")
+    except Exception as e:
+        print(f"[ERR] Background Cloud Sync Failed: {e}")
 
 def get_all_zones() -> list[Zone]:
     global REDIS_UP
@@ -161,7 +273,7 @@ def get_all_zones() -> list[Zone]:
         REDIS_UP = False
         return [z for z in _local_zones_dict.values() if z.zone_id in VALID_ZONE_IDS]
 
-def set_zone(zone: Zone):
+def set_zone(zone: Zone, sync_to_cloud=True):
     global REDIS_UP
     _local_zones_dict[zone.zone_id] = zone
     if not REDIS_UP:
@@ -186,6 +298,9 @@ def set_zone(zone: Zone):
             "peak_occupancy": zone.peak_occupancy
         }
         redis_client.hset(f"{ZONE_PREFIX}{zone.zone_id}", mapping=data)
+        # Proactive sync to Firestore for real-time cloud dashboard
+        if sync_to_cloud:
+            _save_to_firestore()
     except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
         REDIS_UP = False
         _save_local_to_disk()
@@ -219,7 +334,7 @@ def get_all_gates() -> list[Gate]:
         REDIS_UP = False
         return list(_local_gates_dict.values())
 
-def set_gate(gate: Gate):
+def set_gate(gate: Gate, sync_to_cloud=True):
     global REDIS_UP
     _local_gates_dict[gate.gate_id] = gate
     if not REDIS_UP:
@@ -237,6 +352,9 @@ def set_gate(gate: Gate):
             "is_open": str(gate.is_open)
         }
         redis_client.hset(f"{GATE_PREFIX}{gate.gate_id}", mapping=data)
+        # Proactive sync to Firestore for real-time cloud dashboard
+        if sync_to_cloud:
+            _save_to_firestore()
     except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
         REDIS_UP = False
         _save_local_to_disk()
@@ -258,6 +376,7 @@ def set_event_phase(phase: str):
         return
     try:
         redis_client.set(EVENT_PHASE_KEY, phase)
+        _save_to_firestore()
     except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
         REDIS_UP = False
         _save_local_to_disk()

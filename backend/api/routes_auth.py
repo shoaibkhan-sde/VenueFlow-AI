@@ -8,7 +8,9 @@ import jwt
 import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
+from extensions import limiter
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -31,7 +33,8 @@ def token_required(f):
             # Dev-Persistence: If server restarted but token is valid, self-heal the mock db
             if not current_user:
                 username = data["username"]
-                _users[username] = {"username": username, "password": "recovered-session"}
+                # Store a dummy hash for recovered sessions to keep it "valid" but inoperable for re-login without register
+                _users[username] = {"username": username, "password": "pbkdf2:sha256:recovered-session-placeholder"}
                 current_user = _users[username]
                 
         except Exception as e:
@@ -40,6 +43,7 @@ def token_required(f):
     return decorated
 
 @auth_bp.route("/api/auth/register", methods=["POST"])
+@limiter.limit("5 per minute")
 def register():
     body = request.get_json(silent=True) or {}
     username = body.get("username")
@@ -49,14 +53,17 @@ def register():
         return jsonify({"error": "Username and password required"}), 400
         
     if username in _users:
-        if _users[username]["password"] == password:
+        if check_password_hash(_users[username]["password"], password):
             return jsonify({"message": "User already registered"}), 200
         return jsonify({"error": "User already exists with different credentials"}), 400
         
-    _users[username] = {"username": username, "password": password}
+    # Securely hash the password before storing
+    hashed_password = generate_password_hash(password)
+    _users[username] = {"username": username, "password": hashed_password}
     return jsonify({"message": "User registered successfully"}), 201
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     body = request.get_json(silent=True) or {}
     username = body.get("username")
@@ -66,7 +73,7 @@ def login():
         return jsonify({"error": "Username and password required"}), 400
         
     user = _users.get(username)
-    if not user or user["password"] != password:
+    if not user or not check_password_hash(user["password"], password):
         return jsonify({"error": "Invalid username or password"}), 401
         
     token = jwt.encode({

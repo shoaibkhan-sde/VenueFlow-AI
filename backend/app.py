@@ -2,8 +2,8 @@
 VenueFlow AI — Flask Application Factory
 """
 
-import eventlet
-eventlet.monkey_patch()
+# import eventlet
+# eventlet.monkey_patch()
 
 import sys
 import os
@@ -16,8 +16,10 @@ from flask_cors import CORS
 
 # Removed 'backend.' prefix because Docker flattens the folder structure
 from config import Config
-from extensions import socketio
+from extensions import socketio, limiter
 from api.routes_crowd import crowd_bp
+# ... (rest of imports)
+
 from api.routes_chat import chat_bp
 from api.routes_gates import gates_bp
 from api.routes_alerts import alerts_bp
@@ -37,6 +39,9 @@ def create_app() -> Flask:
 
     # ── CORS ─────────────────────────────────────────────────
     CORS(app, origins=Config.CORS_ORIGINS)
+
+    # ── Rate Limiting ────────────────────────────────────────
+    limiter.init_app(app)
 
     # ── Blueprints ───────────────────────────────────────────
     app.register_blueprint(crowd_bp)
@@ -71,24 +76,27 @@ def create_app() -> Flask:
     # Register socket events (Must happen after init_app in some environments)
     import api.sockets 
 
-    # Initialize Redis Data
+    # ── Startup Initialization (Stabilized & Non-Blocking) ─────
     try:
-        # Corrected import path
-        from services.redis_service import init_redis_data
+        from services.redis_service import init_redis_data, sync_state_to_cloud
+        from services.simulation_service import start_simulation
+        from services.alert_service import purge_old_history
+        import threading
+
+        # 1. Fast Seed (Redis only)
         init_redis_data()
-    except Exception as e:
-        print(f"Failed to initialize redis data {e}")
-
-    # ── Simulation Service ───────────────────────────────────
-    # Start background data updates
-    start_simulation(app)
-
-    # Purge old history (>10) to reset to new strict requirements
-    with app.app_context():
-        try:
-            from services.alert_service import purge_old_history
+        
+        # 2. Heavy Sync (Firestore) - Run in background to prevent 503 timeouts
+        threading.Thread(target=sync_state_to_cloud, daemon=True).start()
+        
+        # 3. Background Services
+        start_simulation(app)
+        
+        with app.app_context():
             purge_old_history()
-        except: pass
+            
+    except Exception as e:
+        app.logger.warning(f"Startup Optimization Skipped: {e}")
 
     return app
 
@@ -99,4 +107,4 @@ app = create_app()
 
 if __name__ == "__main__":
     # log_output=False prevents terminal-killing UnicodeEncodeErrors in Windows/Docker
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, log_output=False)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True, log_output=False, allow_unsafe_werkzeug=True)

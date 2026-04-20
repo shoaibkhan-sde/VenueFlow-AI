@@ -278,7 +278,7 @@ export default function LoginPage({ onClose }) {
   const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [2.5, -2.5]), { stiffness: 120, damping: 22 });
   const rotateY = useSpring(useTransform(mouseX, [-0.5, 0.5], [-3.5, 3.5]), { stiffness: 120, damping: 22 });
 
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
 
   const onMouseMove = e => {
     if (!cardRef.current) return;
@@ -670,6 +670,18 @@ export default function LoginPage({ onClose }) {
 
                   {/* Google SSO */}
                   <motion.button type="button"
+                    onClick={async () => {
+                      setError('');
+                      setIsLoading(true);
+                      const r = await loginWithGoogle();
+                      if (r.success) {
+                        setSuccess(true);
+                        if (onClose) setTimeout(onClose, 2000);
+                      } else {
+                        setError(r.error || 'Google Sign-In failed');
+                      }
+                      setIsLoading(false);
+                    }}
                     style={{ width: '100%', padding: '13px 0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', transition: 'all 0.25s' }}
                     whileHover={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)' }}
                     whileTap={{ scale: 0.985 }}

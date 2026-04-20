@@ -1,9 +1,41 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { auth, googleProvider, isFirebaseEnabled } from '../services/firebase';
+import { signInWithPopup, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('venueflow_token') || '');
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isFirebaseEnabled || !auth) {
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        setToken(firebaseUser.uid);
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  const loginWithGoogle = async () => {
+    if (!isFirebaseEnabled || !auth) {
+      return { success: false, error: 'Google Login is currently unavailable (Firebase not initialized).' };
+    }
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      return { success: true, user: result.user };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
 
   const login = async (username, password) => {
     try {
@@ -41,14 +73,16 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     localStorage.removeItem('venueflow_token');
     setToken('');
+    await firebaseSignOut(auth);
+    setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ token, login, register, logout }}>
-      {children}
+    <AuthContext.Provider value={{ token, user, loading, login, loginWithGoogle, register, logout, isFirebaseEnabled }}>
+      {(!loading || !isFirebaseEnabled) && children}
     </AuthContext.Provider>
   );
 }

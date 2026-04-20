@@ -85,9 +85,14 @@ def distances_to_gates(
     gates: list,
 ) -> dict[str, float]:
     """Compute distance from user to every gate using a single cached batch request."""
-    # Enforce types at the boundary
-    user_lat = float(user_lat)
-    user_lon = float(user_lon)
+    # Enforce types at the boundary - hardened to handle tuples/lists
+    def _safe_float(val):
+        if isinstance(val, (list, tuple)):
+            return float(val[0])
+        return float(val)
+
+    user_lat = _safe_float(user_lat)
+    user_lon = _safe_float(user_lon)
     gate_coords = tuple((float(g.latitude), float(g.longitude)) for g in gates)
 
     dist_list = _fetch_batch_matrix(user_lat, user_lon, gate_coords)

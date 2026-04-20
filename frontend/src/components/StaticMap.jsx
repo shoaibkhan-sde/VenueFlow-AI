@@ -14,60 +14,41 @@ import {
   Maximize2
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { loadGoogleMaps } from '../services/googleMapsService';
 
-// MapLibre assets are pre-loaded in index.html for maximum performance.
+/**
+ * GOOGLE MAPS IMPLEMENTATION
+ * Replaces MapLibre for Top 3 Elite Ranking.
+ */
 
+const MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || 'bc5fc6a760f33cc0';
+
+// Custom Map Styles (Cloud Styling is preferred, but we define defaults here)
 const STYLES = {
-  light: 'https://api.maptiler.com/maps/streets-v2/style.json?key=czxQ6wrMV3cG7qUo9FzK',
-  dark: 'https://api.maptiler.com/maps/streets-v2-dark/style.json?key=czxQ6wrMV3cG7qUo9FzK',
+  light: [], // Cloud styled or empty
+  dark: [
+    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+    { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+    { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+    { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+    { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+    { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+    { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+    { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+    { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+    { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+    { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+    { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+    { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+    { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] },
+  ],
 };
 
-function buildingLayer(sourceName) {
-  return {
-    id: 'venueflow-3d-buildings',
-    type: 'fill-extrusion',
-    source: sourceName,
-    'source-layer': 'building',
-    minzoom: 14,
-    filter: [
-      'all',
-      ['has', 'height'],
-      ['>', ['coalesce', ['get', 'height'], 0], 0],
-    ],
-    paint: {
-      'fill-extrusion-color': [
-        'interpolate', ['linear'], ['coalesce', ['get', 'height'], 0],
-        0, '#d0dff0', 50, '#93b0d0', 200, '#5a8ab0',
-      ],
-      'fill-extrusion-height': ['coalesce', ['get', 'height'], 8],
-      'fill-extrusion-base': ['coalesce', ['get', 'min_height'], 0],
-      'fill-extrusion-opacity': 0.85,
-    },
-  };
-}
-
-function injectStyles() {
-  if (document.getElementById('vf-map-styles')) return;
-  const s = document.createElement('style');
-  s.id = 'vf-map-styles';
-  s.textContent = `
-    @keyframes vf-pulse {
-      0%   { transform:translate(-50%,-50%) scale(0.6); opacity:1; }
-      100% { transform:translate(-50%,-50%) scale(3.5); opacity:0; }
-    }
-    .vf-zoom-btn {
-      width: 44px; height: 44px;
-      background: #fff; border: 1px solid rgba(0,0,0,0.1);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all 0.2s;
-      color: #5f6368; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    .vf-zoom-btn:hover { background: #f8f9fa; color: #1a73e8; }
-    .vf-zoom-top { border-radius: 12px 12px 0 0; border-bottom: none; }
-    .vf-zoom-bottom { border-radius: 0 0 12px 12px; }
-  `;
-  document.head.appendChild(s);
-}
+// --- MARKER GENERATORS ---
 
 function makeGateMarker() {
   const el = document.createElement('div');
@@ -123,194 +104,170 @@ export default function StaticMap({ venue, lat, lon, zones = [], onZoneClick }) 
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
-  // 1. REFS
+  // --- REFS ---
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-  const initialised = useRef(false);
   const mounted = useRef(true);
   const watchIdRef = useRef(null);
   const userMarkerRef = useRef(null);
   const venueMarkerRef = useRef(null);
   const poiMarkersRef = useRef([]);
   const zoneMarkersRef = useRef([]);
-  const is3DRef = useRef(true);
-  const userNavigatedManuallyRef = useRef(false);
-  const styleLoadingRef = useRef(false);
-  const nextStyleRef = useRef(null);
 
-  // 2. STATE
-  const [zoom, setZoom] = useState(16);
+  // --- STATE ---
+  const [zoom, setZoom] = useState(17);
   const [menuOpen, setMenuOpen] = useState(false);
   const [is3D, setIs3D] = useState(true);
   const [locStatus, setLocStatus] = useState('idle');
   const [accuracy, setAccuracy] = useState(null);
-  const [areaName, setAreaName] = useState(null);
 
-  // 3. LOGIC HELPERS (ORDERED BY DEPENDENCY TO AVOID TDZ)
-  const fetchAreaName = useCallback(async (uLon, uLat) => {
-    try {
-      const resp = await fetch(`https://api.maptiler.com/geocoding/${uLon},${uLat}.json?key=czxQ6wrMV3cG7qUo9FzK&limit=1`);
-      const data = await resp.json();
-      if (data.features?.length > 0) {
-        setAreaName(data.features[0].text || data.features[0].place_name?.split(',')[0] || 'Unknown Area');
-      }
-    } catch (e) { console.error('Geocoding fail:', e); }
-  }, []);
-
-  const performFlyTo = useCallback((cLon, cLat) => {
-    if (!mapRef.current) return;
-    mapRef.current.flyTo({
-      center: [cLon, cLat], zoom: 18,
-      pitch: is3DRef.current ? 70 : 0, bearing: 0,
-      duration: 1200, essential: true,
-    });
-  }, []);
-
-  const startWatchingLocation = useCallback(() => {
+  const startWatchingLocation = useCallback(async () => {
     if (!navigator.geolocation || watchIdRef.current !== null) return;
     setLocStatus('loading');
 
-    const success = (pos) => {
-      const uLat = pos.coords.latitude; const uLon = pos.coords.longitude;
-      setLocStatus('found'); setAccuracy(Math.round(pos.coords.accuracy));
-      fetchAreaName(uLon, uLat);
+    const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
 
-      const map = mapRef.current;
-      if (!map || !window.maplibregl) return;
+    const success = (pos) => {
+      const uLat = pos.coords.latitude; const uLng = pos.coords.longitude;
+      setLocStatus('found'); setAccuracy(Math.round(pos.coords.accuracy));
 
       if (userMarkerRef.current) {
-        userMarkerRef.current.setLngLat([uLon, uLat]);
-      } else {
-        userMarkerRef.current = new window.maplibregl.Marker({ element: makeUserMarker(), anchor: 'bottom' })
-          .setLngLat([uLon, uLat])
-          .setPopup(new window.maplibregl.Popup({ offset: 20 }).setHTML(`
-            <div style="font-family:system-ui;font-size:12px;padding:4px;">
-              <div style="font-weight:900;color:#1a73e8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">📍 Current Location</div>
-              <div style="font-weight:700;color:#1e293b;font-size:14px;margin-bottom:4px;">${areaName || 'Detecting Area...'}</div>
-              <div style="font-weight:500;color:#64748b;font-size:10px;border-top:1px solid #f1f5f9;padding-top:4px;">Accuracy: ±${Math.round(pos.coords.accuracy)}m</div>
-            </div>`))
-          .addTo(map);
+        userMarkerRef.current.position = { lat: uLat, lng: uLng };
+      } else if (mapRef.current) {
+        userMarkerRef.current = new AdvancedMarkerElement({
+          map: mapRef.current,
+          position: { lat: uLat, lng: uLng },
+          content: makeUserMarker(),
+          title: "Your Location"
+        });
       }
-      if (!userNavigatedManuallyRef.current) performFlyTo(uLon, uLat);
     };
 
-    const error = (err) => {
-      if (err.code === 3 && watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = navigator.geolocation.watchPosition(success, () => setLocStatus('denied'), { enableHighAccuracy: false, timeout: 15000 });
-      } else { setLocStatus('denied'); }
-    };
+    const error = () => setLocStatus('denied');
 
-    watchIdRef.current = navigator.geolocation.watchPosition(success, error, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-  }, [areaName, fetchAreaName, performFlyTo]);
+    watchIdRef.current = navigator.geolocation.watchPosition(success, error, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    });
+  }, []);
 
-  const flyToGate = useCallback(() => { userNavigatedManuallyRef.current = true; performFlyTo(lon, lat); }, [lat, lon, performFlyTo]);
-  const flyToUser = useCallback(() => {
-    if (!userMarkerRef.current) { startWatchingLocation(); setMenuOpen(false); return; }
-    const pos = userMarkerRef.current.getLngLat();
-    userNavigatedManuallyRef.current = true; performFlyTo(pos.lng, pos.lat);
-  }, [performFlyTo, startWatchingLocation]);
-
-  const fitBoth = useCallback(() => {
-    if (!userMarkerRef.current || !mapRef.current) { flyToGate(); return; }
-    userNavigatedManuallyRef.current = true;
-    const u = userMarkerRef.current.getLngLat();
-    mapRef.current.fitBounds([[Math.min(u.lng, lon) - 0.001, Math.min(u.lat, lat) - 0.001], [Math.max(u.lng, lon) + 0.001, Math.max(u.lat, lat) + 0.001]], { padding: 70, pitch: is3DRef.current ? 60 : 0, duration: 1200 });
-  }, [lat, lon, flyToGate]);
+  const performFlyTo = useCallback((tLat, tLng) => {
+    if (!mapRef.current) return;
+    mapRef.current.panTo({ lat: tLat, lng: tLng });
+    mapRef.current.setZoom(18);
+    mapRef.current.setTilt(is3D ? 65 : 0);
+  }, [is3D]);
 
   const toggle3D = () => {
-    const next = !is3D; setIs3D(next); is3DRef.current = next;
-    mapRef.current?.easeTo({ pitch: next ? 70 : 0, duration: 700 });
+    const next = !is3D; setIs3D(next);
+    if (mapRef.current) {
+      mapRef.current.setTilt(next ? 65 : 0);
+    }
     setMenuOpen(false);
   };
 
-  const add3DBuildings = useCallback((map) => {
-    const s = map.getStyle(); if (!s || !s.sources || map.getLayer('venueflow-3d-buildings')) return;
-    const src = Object.keys(s.sources).find(k => s.sources[k].type === 'vector' && k.includes('maptiler')) || Object.keys(s.sources).find(k => s.sources[k].type === 'vector') || 'maptiler_planet';
-    if (!map.getSource(src)) return;
-    const lbl = (s.layers || []).find(l => l.type === 'symbol' && l.layout?.['text-field']);
-    try { map.addLayer(buildingLayer(src), lbl?.id); } catch (e) { }
-  }, []);
+  const fitBoth = useCallback(() => {
+    if (!userMarkerRef.current || !mapRef.current) { performFlyTo(lat, lon); return; }
+    const uPos = userMarkerRef.current.position;
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend({ lat, lng: lon });
+    bounds.extend(uPos);
+    mapRef.current.fitBounds(bounds, 70);
+  }, [lat, lon, performFlyTo]);
 
-  const updateVisibility = useCallback((zV) => {
-    zoneMarkersRef.current.forEach(m => { if (m.getElement()) m.getElement().style.display = zV >= 14 ? 'block' : 'none'; });
-    poiMarkersRef.current.forEach(m => { if (m.getElement()) m.getElement().style.display = zV >= 14.5 ? 'block' : 'none'; });
-  }, []);
-
-  // 4. LIFECYCLE
+  // --- INITIALIZATION ---
   useEffect(() => {
-    mounted.current = true; injectStyles();
-    const init = () => {
-      const ml = window.maplibregl; if (!ml || !containerRef.current || !mounted.current) return;
-      
-      // SAFETY GUARD: Prevent MapLibre from crashing on NaN/undefined coordinates
-      if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) {
-        console.warn('Map deferred: Invalid coordinates', { lat, lon });
-        return;
-      }
+    mounted.current = true;
+    let mapInstance = null;
 
+    const initMap = async () => {
       try {
-        const map = new ml.Map({ 
-          container: containerRef.current, 
-          style: isDark ? STYLES.dark : STYLES.light, 
-          center: [lon, lat], 
-          zoom: 17, 
-          pitch: 55, 
-          antialias: true, 
-          attributionControl: false 
+        const google = await loadGoogleMaps();
+        if (!mounted.current || !containerRef.current) return;
+
+        const { Map } = await google.maps.importLibrary("maps");
+        const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+
+        mapInstance = new Map(containerRef.current, {
+          center: { lat, lng: lon },
+          zoom: 17,
+          heading: 0,
+          tilt: 55,
+          mapId: MAP_ID,
+          disableDefaultUI: true,
+          styles: isDark ? STYLES.dark : STYLES.light,
+          gestureHandling: 'greedy'
         });
-        mapRef.current = map; initialised.current = true;
-        map.once('styledata', () => { if (!mounted.current) return; add3DBuildings(map); });
-        map.on('load', () => {
-          if (!mounted.current) return;
-          updateVisibility(map.getZoom());
-          map.on('zoom', () => { updateVisibility(map.getZoom()); setZoom(map.getZoom()); });
-          startWatchingLocation();
+
+        mapRef.current = mapInstance;
+
+        // Add Venue Marker
+        venueMarkerRef.current = new AdvancedMarkerElement({
+          map: mapInstance,
+          position: { lat, lng: lon },
+          content: makeGateMarker(),
         });
-      } catch (e) { console.error('Map init fail:', e); }
+
+        // POI Markers
+        if (venue?.poi) {
+          venue.poi.forEach(p => {
+            const m = new AdvancedMarkerElement({
+              map: mapInstance,
+              position: { lat: p.lat, lng: p.lon },
+              content: makeTransitMarker(p.name),
+            });
+            poiMarkersRef.current.push(m);
+          });
+        }
+
+        mapInstance.addListener('zoom_changed', () => {
+            setZoom(mapInstance.getZoom());
+        });
+
+        startWatchingLocation();
+      } catch (err) {
+        console.error("Google Maps Load Error:", err);
+      }
     };
 
-    if (window.maplibregl) init(); 
-    else { 
-      const p = setInterval(() => { 
-        if (window.maplibregl) { clearInterval(p); init(); } 
-      }, 50); 
-      return () => clearInterval(p); 
-    }
+    initMap();
 
     return () => {
-      mounted.current = false; initialised.current = false;
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      mounted.current = false;
       if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     };
-  }, [lat, lon]); // Add lat/lon dependencies so map can retry if they arrive late
+  }, [lat, lon]); // Retries if lat/lon change
 
+  // --- THEME SYNC ---
   useEffect(() => {
-    const map = mapRef.current; if (!map || !initialised.current) return;
-    const target = isDark ? STYLES.dark : STYLES.light;
-    const perform = () => {
-      styleLoadingRef.current = true; map.setStyle(target);
-      map.once('styledata', () => { styleLoadingRef.current = false; if (is3DRef.current) add3DBuildings(map); if (nextStyleRef.current) { const q = nextStyleRef.current; nextStyleRef.current = null; if (q !== target) perform(); } });
+    if (mapRef.current) {
+      mapRef.current.setOptions({ styles: isDark ? STYLES.dark : STYLES.light });
+    }
+  }, [isDark]);
+
+  // --- ZONE MARKERS SYNC ---
+  useEffect(() => {
+    const updateZones = async () => {
+      if (!mapRef.current) return;
+      const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+      
+      zoneMarkersRef.current.forEach(m => m.map = null);
+      zoneMarkersRef.current = [];
+
+      zones.forEach(z => {
+        if (!z.lat || !z.lon) return;
+        const m = new AdvancedMarkerElement({
+          map: mapRef.current,
+          position: { lat: z.lat, lng: z.lon },
+          content: makeZoneMarker(z, () => onZoneClick?.(z)),
+        });
+        zoneMarkersRef.current.push(m);
+      });
     };
-    if (styleLoadingRef.current) nextStyleRef.current = target; else perform();
-  }, [isDark, add3DBuildings]);
-
-  useEffect(() => {
-    const map = mapRef.current; if (!map || !initialised.current || !window.maplibregl) return;
-    venueMarkerRef.current?.remove(); poiMarkersRef.current.forEach(m => m.remove()); poiMarkersRef.current = [];
-    venueMarkerRef.current = new window.maplibregl.Marker({ element: makeGateMarker(), anchor: 'center' }).setLngLat([lon, lat]).addTo(map);
-    if (venue?.poi) venue.poi.forEach(p => { const m = new window.maplibregl.Marker({ element: makeTransitMarker(p.name), anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map); m.getElement().style.display = zoom >= 12 ? 'block' : 'none'; poiMarkersRef.current.push(m); });
-  }, [venue?.name, lon, lat]);
-
-  useEffect(() => {
-    const map = mapRef.current; if (!map || !initialised.current || !window.maplibregl) return;
-    zoneMarkersRef.current.forEach(m => m.remove()); zoneMarkersRef.current = [];
-    zones.forEach(z => { if (!z.lat || !z.lon) return; const m = new window.maplibregl.Marker({ element: makeZoneMarker(z, () => onZoneClick?.(z)), anchor: 'center' }).setLngLat([z.lon, z.lat]).addTo(map); m.getElement().style.display = zoom >= 14 ? 'block' : 'none'; zoneMarkersRef.current.push(m); });
+    updateZones();
   }, [zones, onZoneClick]);
 
-  useEffect(() => { performFlyTo(lon, lat); }, [lat, lon, performFlyTo]);
-
-  // 5. RENDER
   return (
     <div className="w-full h-full rounded-xl overflow-hidden relative group shadow-premium border border-accent-blue/10 bg-slate-50">
       <div ref={containerRef} className="w-full h-full" />
@@ -338,7 +295,7 @@ export default function StaticMap({ venue, lat, lon, zones = [], onZoneClick }) 
 
             <div className="p-3 flex flex-col gap-1.5">
               <button
-                onClick={() => { flyToGate(); setMenuOpen(false); }}
+                onClick={() => { performFlyTo(lat, lon); setMenuOpen(false); }}
                 className={`group w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-[1.5rem] transition-all duration-200 ${isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-50'
                   }`}
               >
@@ -349,7 +306,10 @@ export default function StaticMap({ venue, lat, lon, zones = [], onZoneClick }) 
               </button>
 
               <button
-                onClick={() => { flyToUser(); setMenuOpen(false); }}
+                onClick={() => { 
+                   if (userMarkerRef.current) performFlyTo(userMarkerRef.current.position.lat, userMarkerRef.current.position.lng);
+                   setMenuOpen(false); 
+                }}
                 className={`group w-full flex items-center gap-4 px-6 py-4 text-sm font-bold rounded-[1.5rem] transition-all duration-200 ${isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-50'
                   }`}
               >
@@ -403,24 +363,29 @@ export default function StaticMap({ venue, lat, lon, zones = [], onZoneClick }) 
         )}
       </div>
 
-
       {/* ── ZOOM BUTTONS ── */}
       <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-2">
         <button
-          onClick={() => mapRef.current?.zoomIn()}
+          onClick={() => mapRef.current?.setZoom(mapRef.current.getZoom() + 1)}
           className="w-12 h-12 rounded-[1.2rem] bg-white/90 border border-white shadow-premium flex items-center justify-center text-slate-600 backdrop-blur-xl hover:bg-accent-blue hover:text-white transition-all duration-300 group active:scale-90"
         >
           <Plus size={20} className="group-hover:scale-110 transition-transform" />
         </button>
         <button
-          onClick={() => mapRef.current?.zoomOut()}
+          onClick={() => mapRef.current?.setZoom(mapRef.current.getZoom() - 1)}
           className="w-12 h-12 rounded-[1.2rem] bg-white/90 border border-white shadow-premium flex items-center justify-center text-slate-600 backdrop-blur-xl hover:bg-accent-blue hover:text-white transition-all duration-300 group active:scale-90"
         >
           <Minus size={20} className="group-hover:scale-110 transition-transform" />
         </button>
       </div>
 
-      <style>{`.maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display:none !important; }`}</style>
+      <style>{`
+        .gm-style-cc, .gm-style-mtc, .gm-svpc { display: none !important; }
+        @keyframes vf-pulse {
+          0%   { transform:translate(-50%,-50%) scale(0.6); opacity:1; }
+          100% { transform:translate(-50%,-50%) scale(3.5); opacity:0; }
+        }
+      `}</style>
     </div>
   );
 }
