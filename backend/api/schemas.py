@@ -6,8 +6,8 @@ class ChatRequestSchema(BaseModel):
     history: Optional[List[dict]] = Field(default_factory=list)
 
 class OptimalGateRequestSchema(BaseModel):
-    lat: float = Field(..., ge=-90, le=90)
-    lon: float = Field(..., ge=-180, le=180)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lon: Optional[float] = Field(default=None, ge=-180, le=180)
     top_k: Optional[int] = Field(default=1, ge=1, le=10)
 
 class RebalanceRequestSchema(BaseModel):

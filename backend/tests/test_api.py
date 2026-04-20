@@ -26,6 +26,12 @@ def test_optimal_gate_invalid_params(client):
     response = client.get('/api/gates/optimal?lat=abc')
     assert response.status_code == 400
 
+def test_optimal_gate_missing_coords(client):
+    """Verify that omitting lat/lon is allowed and returns best-by-queue."""
+    response = client.get('/api/gates/optimal?top_k=5')
+    assert response.status_code == 200
+    assert len(response.json) > 0
+
 def test_unauthorized_access(client):
     """Verify that protected routes rejected unauthorized requests."""
     response = client.get('/api/auth/verify')

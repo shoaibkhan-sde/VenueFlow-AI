@@ -56,7 +56,13 @@ def optimal_gate():
         return jsonify({"error": "Invalid query parameters", "details": e.errors()}), 400
 
     gates = get_all_gates()
-    user_dists = distances_to_gates(req_data.lat, req_data.lon, gates)
+    
+    # Efficient fallback: If coords are missing, skip the Map service and treat distances as 0.0
+    if req_data.lat is not None and req_data.lon is not None:
+        user_dists = distances_to_gates(req_data.lat, req_data.lon, gates)
+    else:
+        user_dists = {}
+
     current_phase = get_event_phase()
     results = find_fastest_gate(gates, user_dists, top_k=req_data.top_k, event_phase=current_phase)
 
