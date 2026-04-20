@@ -9,7 +9,7 @@
 
 ---
 
-## 🏆 Why VenueFlow Wins (Judge's Summary)
+## 🏆 Why VenueFlow
 
 VenueFlow-AI isn't just a dashboard; it's a **Production-Ready Operational System** designed for high-stakes environments.
 
@@ -76,23 +76,5 @@ score(gate) = queue_length / throughput_rate + α · distance_meters
 
 ---
 
-## 🚀 Quick Start
-
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-python -m backend.app
-```
-
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
 ## License
-MIT © Shoaib Khan & VenueFlow AI
+MIT © VenueFlow AI
