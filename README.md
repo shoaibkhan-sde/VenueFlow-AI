@@ -192,15 +192,6 @@ Logging and system messages have been sanitized for **Windows/Linux/macOS parity
 
 ---
 
-## 📦 Staying Under 10MB
-
-- `node_modules/` and `venv/` are excluded via `.gitignore`
-- No large assets or binaries in the repo
-- Tailwind CSS is purged at build time
-- All source files are plain text (< 200KB total)
-
----
-
 ## License
 
 MIT © VenueFlow AI
