@@ -38,6 +38,9 @@ COPY backend/ .
 # Flask will serve these files from /app/static
 COPY --from=frontend-builder /app/frontend/dist ./static
 
+# Create logs directory and persistent storage hooks
+RUN mkdir -p /app/logs
+
 # Create a non-root user for security
 RUN useradd -m venueflow && chown -R venueflow:venueflow /app
 USER venueflow
@@ -50,6 +53,6 @@ ENV PORT=8080
 # Cloud Run expects the app to listen on the port defined by $PORT
 EXPOSE 8080
 
-# Run the app with the modern 'gthread' worker class.
-# We use /dev/shm and gthread for stable, non-blocking I/O on Cloud Run.
-CMD gunicorn --worker-class gthread -w 1 --threads 8 --timeout 120 --worker-tmp-dir /dev/shm --bind 0.0.0.0:$PORT app:app
+# Run the app with the 'eventlet' worker class for Socket.IO support.
+# timeout=0 allows long-polling/websockets to persist without Gunicorn killing them.
+CMD gunicorn --worker-class eventlet -w 1 --timeout 0 --bind 0.0.0.0:$PORT app:app

@@ -10,6 +10,10 @@ from core.models import Gate
 from core.analyzer import find_fastest_gate, rebalance_crowd
 from services.maps_service import distances_to_gates
 from services.redis_service import get_all_gates, set_gate, get_event_phase
+from services.audit_service import audit_logger
+from api.routes_auth import token_required, admin_required
+from api.schemas import OptimalGateRequestSchema, RebalanceRequestSchema
+from pydantic import ValidationError
 
 gates_bp = Blueprint("gates", __name__)
 
@@ -45,16 +49,16 @@ def optimal_gate():
     Query params: lat, lon, top_k (optional, default 3)
     """
     try:
-        lat = float(request.args.get("lat", 23.0312))
-        lon = float(request.args.get("lon", 72.5260))
-        top_k = int(request.args.get("top_k", 10))
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid query parameters"}), 400
+        # Pydantic validation for GET parameters (via dict conversion)
+        args = request.args.to_dict()
+        req_data = OptimalGateRequestSchema(**args)
+    except ValidationError as e:
+        return jsonify({"error": "Invalid query parameters", "details": e.errors()}), 400
 
     gates = get_all_gates()
-    user_dists = distances_to_gates(lat, lon, gates)
+    user_dists = distances_to_gates(req_data.lat, req_data.lon, gates)
     current_phase = get_event_phase()
-    results = find_fastest_gate(gates, user_dists, top_k=top_k, event_phase=current_phase)
+    results = find_fastest_gate(gates, user_dists, top_k=req_data.top_k, event_phase=current_phase)
 
     return jsonify({
         "recommendations": [
@@ -71,19 +75,43 @@ def optimal_gate():
 
 
 @gates_bp.route("/api/gates/rebalance", methods=["POST"])
-def rebalance():
+@token_required
+@admin_required
+def rebalance(current_user):
     """
     Load-balance incoming attendees across open gates.
-    Body: { "incomingCount": 500 }
+    Body: { "total_incoming": 500 }
     """
     body = request.get_json(silent=True) or {}
-    count = body.get("incomingCount", 100)
-    gates = get_all_gates()
-    assignments = rebalance_crowd(gates, int(count))
     
-    # Save modified queues into redis
+    try:
+        req_data = RebalanceRequestSchema(**body)
+    except ValidationError as e:
+        return jsonify({"error": "Invalid input", "details": e.errors()}), 400
+
+    gates = get_all_gates()
+    assignments = rebalance_crowd(gates, req_data.total_incoming)
+    
+    # Commit modified queues into persistence layer
+    modified_gates = []
     for g in gates:
-        if assignments.get(g.gate_id, 0) > 0:
+        delta = assignments.get(g.gate_id, 0)
+        if delta > 0:
+            g.current_queue += delta
             set_gate(g)
+            modified_gates.append(g.gate_id)
+    
+    # Audit high-impact admin action
+    audit_logger.log("GATE_REBALANCE_ACTION", "SUCCESS", 
+                     user_email=current_user['email'], 
+                     metadata={
+                         "total_incoming": req_data.total_incoming,
+                         "affected_gates": modified_gates
+                     })
             
-    return jsonify({"assignments": assignments})
+    return jsonify({
+        "status": "success",
+        "assignments": assignments, 
+        "admin": current_user['email'],
+        "affected_gates": modified_gates
+    })

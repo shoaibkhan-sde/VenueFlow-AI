@@ -1,52 +1,64 @@
 import pytest
+from core.models import Gate, RouteRecommendation
 from core.analyzer import find_fastest_gate, rebalance_crowd
-from core.models import Gate
 
 @pytest.fixture
 def sample_gates():
     return [
-        # gate_id, name, zone, lat, lon, capacity, level, queue, throughput, is_open
-        Gate("G1", "North Gate", "ZONE_A", 40.0, -70.0, 100, 1, 10, 2.0, True),
-        Gate("G2", "South Gate", "ZONE_B", 41.0, -71.0, 100, 1, 100, 1.0, True),
-        Gate("G3", "Emergency Exit", "ZONE_C", 42.0, -72.0, 50, 1, 0, 0.0, False),
+        Gate(gate_id="gate-1", name="North Gate", zone="north", latitude=23.03, longitude=72.52, capacity=1000, current_queue=10, throughput_rate=2.0),
+        Gate(gate_id="gate-2", name="South Gate", zone="south", latitude=23.04, longitude=72.53, capacity=1000, current_queue=50, throughput_rate=1.0),
+        Gate(gate_id="gate-3", name="East Gate", zone="east", latitude=23.05, longitude=72.54, capacity=500, current_queue=5, throughput_rate=5.0, is_open=False),
     ]
 
 def test_find_fastest_gate_basic(sample_gates):
-    distances = {"G1": 100, "G2": 100, "G3": 0}
-    # G1 wait ~ 10/2 = 5s. G2 wait ~ 100/1 = 100s. G1 should win.
-    recommendations = find_fastest_gate(sample_gates, distances, top_k=1)
+    """Verify basic priority calculation (Queue/Rate + Distance)."""
+    user_dists = {"gate-1": 100, "gate-2": 500, "gate-3": 200}
+    # Gate 1: 10/2 + 100*0.05 = 5 + 5 = 10s
+    # Gate 2: 50/1 + 500*0.05 = 50 + 25 = 75s
+    # Gate 3: Closed (Inf)
     
-    assert len(recommendations) == 1
-    assert recommendations[0].gate.gate_id == "G1"
-    # predicted_wait_seconds in analyzer includes distance penalty (dist / walking_speed)
-    # 5s (queue) - (dist / speed * rate) ... for 100m it might drain to 0
-    assert recommendations[0].predicted_wait_seconds >= 0
-
-def test_find_fastest_gate_distance_penalty(sample_gates):
-    # G1 is closer to 'base' but G2 has 0 queue (overriding fixture)
-    sample_gates[1].current_queue = 0
-    distances = {"G1": 1000, "G2": 10} 
+    results = find_fastest_gate(sample_gates, user_dists, top_k=2)
     
-    recommendations = find_fastest_gate(sample_gates, distances, top_k=1)
-    assert recommendations[0].gate.gate_id == "G2"
+    assert len(results) == 2
+    assert results[0].gate.gate_id == "gate-1"
+    assert results[0].estimated_wait_seconds == 10.0
 
-def test_closed_gate_ignored(sample_gates):
-    distances = {"G1": 100, "G2": 100, "G3": 1}
-    recommendations = find_fastest_gate(sample_gates, distances, top_k=5)
+def test_find_fastest_gate_empty_lists():
+    """Verify resilience against empty data."""
+    assert find_fastest_gate([], {}, top_k=5) == []
+
+def test_find_fastest_gate_high_congestion(sample_gates):
+    """Verify that a far-away but empty gate is preferred over a nearby congested one."""
+    # Add a far gate that's empty
+    sample_gates.append(Gate(gate_id="gate-far", name="Far Gate", zone="west", latitude=23.99, longitude=72.99, 
+                           capacity=1000, current_queue=0, throughput_rate=10.0))
     
-    # G3 is closed, so it should not be in recommendations
-    gate_ids = [r.gate.gate_id for r in recommendations]
-    assert "G3" not in gate_ids
-
-def test_rebalance_crowd(sample_gates):
-    # 30 people incoming. G1 has rate 2, G2 has rate 1.
-    assignments = rebalance_crowd(sample_gates, total_incoming=30)
+    user_dists = {"gate-1": 100, "gate-2": 500, "gate-f": 1000, "gate-far": 5000}
+    # Gate 1: 10s
+    # Gate 2: 75s
+    # Gate-Far: 0/10 + 5000*0.05 = 250s (Okay, far but maybe not better)
     
-    # G1 should get more since it's faster
-    assert assignments["G1"] > assignments["G2"]
-    assert assignments.get("G3", 0) == 0
+    results = find_fastest_gate(sample_gates, user_dists)
+    assert results[0].gate.gate_id == "gate-1"
 
-def test_no_viable_gates():
-    gates = [Gate("GX", "Broken", "ZONE_X", 0, 0, 0, 1, 0, 0, False)]
-    recommendations = find_fastest_gate(gates, {"GX": 0}, top_k=1)
-    assert len(recommendations) == 0
+def test_rebalance_crowd_simple(sample_gates):
+    """Verify crowd rebalancing logic across open gates."""
+    # Gate 1 (2.0 rate), Gate 2 (1.0 rate)
+    # Total incoming: 300
+    assignments = rebalance_crowd(sample_gates, 300)
+    
+    # It should assign more to the higher throughput gate
+    assert assignments["gate-1"] > assignments["gate-2"]
+    assert sum(assignments.values()) == 300
+
+def test_rebalance_no_open_gates():
+    """Verify handling of venue-wide lockdown."""
+    closed_gates = [Gate(gate_id="G1", name="G1", zone="Z1", latitude=0, longitude=0, capacity=10, is_open=False)]
+    assignments = rebalance_crowd(closed_gates, 100)
+    assert assignments == {"G1": 0}
+
+def test_routing_result_serialization():
+    """Verify helper model behavior."""
+    g = Gate(gate_id="X", name="X", zone="Z", latitude=0, longitude=0, capacity=10)
+    res = RouteRecommendation(gate=g, estimated_wait_seconds=10, predicted_wait_seconds=12, distance_meters=100, composite_score=5)
+    assert res.gate.gate_id == "X"

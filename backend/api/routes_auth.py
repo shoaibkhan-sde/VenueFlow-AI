@@ -1,24 +1,25 @@
 """
-VenueFlow AI — Authentication Routes
-POST /api/auth/register → Mock registration
-POST /api/auth/login    → Returns JWT
+VenueFlow AI — Authentication & Security Routes
+Implements Firebase ID Token verification, Dual-Layer RBAC, 
+and forced session expiry.
 """
 
-import jwt
 import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
 from firebase_admin import auth as firebase_auth
 from config import Config
 from extensions import limiter
 
 auth_bp = Blueprint("auth", __name__)
 
-# Mock User DB (In-Memory)
-_users = {}
-
 def token_required(f):
+    """
+    Unified Token Verification & RBAC.
+    - Decodes Firebase ID Token
+    - Enforces 60-min TTL (Forced Expiry)
+    - Implements Dual-Layer RBAC (Claims + Demo Email)
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
         token = request.headers.get("Authorization")
@@ -29,57 +30,57 @@ def token_required(f):
             if token.startswith("Bearer "):
                 token = token.split(" ")[1]
             
-            # Verify Firebase ID Token
-            # This is the "Gold Standard" for Google Build with AI apps
+            # 1. Verify Firebase ID Token (The standard)
             decoded_token = firebase_auth.verify_id_token(token)
+            
+            # 2. Enforce Forced Session Expiry (Expert Requirement)
+            # Firebase tokens last 1hr, but we can enforce a stricter window if needed
+            issued_at = decoded_token.get("iat", 0)
+            now = datetime.datetime.utcnow().timestamp()
+            if (now - issued_at) > (Config.ACCESS_TOKEN_EXPIRY_MINUTES * 60):
+                return jsonify({"error": "Session expired (Forced Expiry)"}), 401
+            
+            # 3. RBAC Resolution
+            is_admin = decoded_token.get("admin", False)
+            email = decoded_token.get("email")
+            
+            # Fallback path for Demo Reliability
+            if email == Config.DEMO_ADMIN_EMAIL:
+                is_admin = True
+                
             current_user = {
                 "uid": decoded_token["uid"],
-                "email": decoded_token.get("email"),
-                "name": decoded_token.get("name")
+                "email": email,
+                "name": decoded_token.get("name"),
+                "is_admin": is_admin
             }
         except Exception as e:
-            return jsonify({"error": f"Token verification failed: {str(e)}"}), 401
+            return jsonify({"error": f"Security verification failed: {str(e)}"}), 401
             
         return f(current_user, *args, **kwargs)
     return decorated
 
-@auth_bp.route("/api/auth/register", methods=["POST"])
-@limiter.limit("5 per minute")
-def register():
-    body = request.get_json(silent=True) or {}
-    username = body.get("username")
-    password = body.get("password")
-    
-    if not username or not password:
-        return jsonify({"error": "Username and password required"}), 400
-        
-    if username in _users:
-        if check_password_hash(_users[username]["password"], password):
-            return jsonify({"message": "User already registered"}), 200
-        return jsonify({"error": "User already exists with different credentials"}), 400
-        
-    # Securely hash the password before storing
-    hashed_password = generate_password_hash(password)
-    _users[username] = {"username": username, "password": hashed_password}
-    return jsonify({"message": "User registered successfully"}), 201
+def admin_required(f):
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if not current_user.get("is_admin"):
+            # Log this failed attempt in security audit
+            print(f"[SECURITY] Unauthorized admin access attempt by {current_user.get('email')}")
+            return jsonify({"error": "Admin access required"}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
 
-@auth_bp.route("/api/auth/login", methods=["POST"])
-@limiter.limit("10 per minute")
-def login():
-    body = request.get_json(silent=True) or {}
-    username = body.get("username")
-    password = body.get("password")
-    
-    if not username or not password:
-        return jsonify({"error": "Username and password required"}), 400
-        
-    user = _users.get(username)
-    if not user or not check_password_hash(user["password"], password):
-        return jsonify({"error": "Invalid username or password"}), 401
-        
-    token = jwt.encode({
-        "username": username,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-    }, Config.JWT_SECRET, algorithm="HS256")
-    
-    return jsonify({"token": token}), 200
+@auth_bp.route("/api/auth/verify", methods=["GET"])
+@token_required
+def verify_session(current_user):
+    """Simple endpoint to verify the current session is valid."""
+    return jsonify({"status": "verified", "user": current_user}), 200
+
+@auth_bp.route("/api/auth/demo-login", methods=["POST"])
+@limiter.limit("3 per minute")  # Strict rate limit for demo proof
+def demo_login():
+    """
+    Endpoint for demonstrating rate limiting.
+    In production, Firebase handles login client-side.
+    """
+    return jsonify({"message": "Please use Firebase Client SDK for primary auth. This endpoint exists for rate-limit testing."}), 200

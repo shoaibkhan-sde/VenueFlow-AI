@@ -33,7 +33,7 @@ function Header({ connected, onLoginClick }) {
   const { token, logout } = useAuth();
   
   return (
-    <header className="relative z-50 shrink-0 backdrop-blur-xl bg-theme-card/70 border-b border-theme-main transition-colors duration-500">
+    <header className="relative z-50 shrink-0 backdrop-blur-xl bg-theme-card/70 border-b border-theme-main transition-colors duration-500" role="banner">
       <div className="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-cyan to-accent-blue flex items-center justify-center text-white font-black text-base">
@@ -46,7 +46,11 @@ function Header({ connected, onLoginClick }) {
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="hidden sm:flex items-center gap-2.5 text-[12px] font-bold text-theme-secondary opacity-80 uppercase tracking-widest">
+          <div 
+            className="hidden sm:flex items-center gap-2.5 text-[12px] font-bold text-theme-secondary opacity-80 uppercase tracking-widest"
+            role="status"
+            aria-live="polite"
+          >
             <span className={`w-2 h-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
             <span>{connected ? 'Live' : 'Offline'}</span>
           </div>
@@ -54,7 +58,7 @@ function Header({ connected, onLoginClick }) {
           <ThemeToggle />
           <button 
             onClick={token ? logout : onLoginClick}
-            className={`flex items-center justify-center p-2 rounded-xl bg-theme-main/5 hover:bg-theme-main/10 transition-all cursor-pointer shadow-sm hover:shadow-md
+            className={`flex items-center justify-center p-2 rounded-xl bg-theme-main/5 hover:bg-theme-main/10 transition-all cursor-pointer shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-accent-blue
               ${token ? 'text-theme-secondary hover:text-red-500' : 'text-accent-blue bg-accent-blue/5 border border-accent-blue/20 hover:bg-accent-blue/10'}`}
             title={token ? "Logout" : "Sign In"}
           >

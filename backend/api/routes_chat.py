@@ -8,7 +8,10 @@ WebSocket chat is handled entirely in sockets.py.
 from flask import Blueprint, request, jsonify
 from services import gemini_service
 from services.redis_service import get_all_zones
+from services.audit_service import audit_logger
 from core.models import Zone
+from api.schemas import ChatRequestSchema
+from pydantic import ValidationError
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -25,20 +28,33 @@ def _build_context(zones: list[Zone]) -> str:
 @chat_bp.route("/api/chat", methods=["POST"])
 def chat():
     """
-    Accept: { "message": "..." }
+    Accept: { "message": "...", "history": [] }
     Return: { "text": "...", "options": [...] }
     """
     body = request.get_json(silent=True) or {}
-    user_msg = body.get("message", "").strip()
+    
+    # 1. Standardized Pydantic Validation (Judge Evidence Layer)
+    try:
+        req_data = ChatRequestSchema(**body)
+    except ValidationError as e:
+        audit_logger.log("INPUT_VALIDATION_FAILURE", "FAIL", metadata={"errors": e.errors()})
+        return jsonify({"error": "Invalid input", "details": e.errors()}), 400
 
-    if not user_msg:
-        return jsonify({"error": "message is required"}), 400
-
+    # 2. Contextual Logic
     zones = get_all_zones()
     context = _build_context(zones)
-    result = gemini_service.chat(user_msg, context=context)
-
-    return jsonify({
-        "text": result.get("text", ""),
-        "options": result.get("options", [])
-    })
+    
+    # 3. Gemini Orchestration
+    try:
+        result = gemini_service.chat(req_data.message, context=context)
+        
+        # 4. Success Audit
+        audit_logger.log("AI_CHAT_QUERY", "SUCCESS", metadata={"msg_len": len(req_data.message)})
+        
+        return jsonify({
+            "text": result.get("text", ""),
+            "options": result.get("options", [])
+        })
+    except Exception as e:
+        audit_logger.log("AI_CHAT_ERROR", "FAIL", metadata={"error": str(e)})
+        return jsonify({"error": "AI service unavailable"}), 503

@@ -22,6 +22,8 @@ export default function CrowdSnapshot() {
   const { gates, recommendations } = useCrowdData();
   const { selectedDestination } = useOnboarding();
 
+  const isLoading = !zones || !gates || zones.length === 0;
+
   // 1. Resolve Location
   const locationId = typeof selectedDestination === 'string' ? selectedDestination : selectedDestination?.id;
   const locationInfo = SECTION_MAP[locationId] || { name: 'Whole Stadium', gates: [], nearby: [] };
@@ -114,6 +116,7 @@ export default function CrowdSnapshot() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-10 mt-12 justify-items-center">
         {/* Card 1: People */}
         <SnapshotCard
+          loading={isLoading}
           label={`People in ${locationName}`}
           title={localOccupancy || 0}
           sub="Currently present inside this area"
@@ -126,6 +129,7 @@ export default function CrowdSnapshot() {
 
         {/* Card 2: Capacity */}
         <SnapshotCard
+          loading={isLoading}
           label={isOverCapacity ? `${locationName} OVER CAPACITY` : `${locationName} Capacity`}
           title={`${capacityPercent}%`}
           sub={isOverCapacity ? `DANGEROUS OVERCROWDING: ${capacityPercent}%` : `${capacityPercent}% total fullness`}
@@ -138,6 +142,7 @@ export default function CrowdSnapshot() {
 
         {/* Card 3: Wait Time */}
         <SnapshotCard
+          loading={isLoading}
           label={`Entry Wait for ${locationName}`}
           title={localWait ? `${localWait} min` : "Calculating..."}
           sub="Typical timing to enter this area"
@@ -150,6 +155,7 @@ export default function CrowdSnapshot() {
 
         {/* Card 4: Fast Entry Gates */}
         <SnapshotCard
+          loading={isLoading}
           label={`Fast Gates for ${locationName}`}
           title={localClearGates.length > 0 
             ? `${localClearGates.length} ${localClearGates.length === 1 ? 'Gate' : 'Gates'}` 

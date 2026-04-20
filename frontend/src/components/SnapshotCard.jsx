@@ -148,8 +148,26 @@ export default function SnapshotCard({
   locationTag,
   progress = null,
   sparkline = false,
+  loading = false,
 }) {
   const tok = STATUS[status] || STATUS.good;
+
+  if (loading) {
+    return (
+      <div 
+        style={{ aspectRatio: '1/1', minWidth: 260, maxWidth: 360, width: '100%', border: '2px solid rgba(0,0,0,0.05)' }}
+        className="relative overflow-hidden flex flex-col rounded-lg bg-white dark:bg-slate-900 mx-auto p-5 animate-pulse"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-white/5 mb-3" />
+        <div className="w-24 h-3 bg-slate-100 dark:bg-white/5 mb-4 rounded-full" />
+        <div className="w-32 h-16 bg-slate-100 dark:bg-white/5 mb-4 rounded-xl" />
+        <div className="mt-auto space-y-2">
+          <div className="w-full h-3 bg-slate-100 dark:bg-white/5 rounded-full" />
+          <div className="w-2/3 h-2 bg-slate-100 dark:bg-white/5 rounded-full" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
