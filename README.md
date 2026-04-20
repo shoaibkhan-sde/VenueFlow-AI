@@ -35,17 +35,6 @@ graph TD
     F --> I
 ```
 
-### Path to 99+ Score: Evidence Layer
-
-| Metric | Proof | Status |
-| :--- | :--- | :--- |
-| **Testing** | 11/11 Core Tests Passing (RBAC, Rate-Limiting, Expiry) | ✅ **ELITE** |
-| **Security** | 100% Firebase ID Token Verify + 60m Forced Expiry | ✅ **HARDENED** |
-| **Code Quality** | Pydantic Centralized Validation + Structured Audit Logs | ✅ **PRODUCTION** |
-| **Accessibility** | ARIA Landmarks + Keyboard-Only Nav + Reduced Motion | ✅ **AAA** |
-
----
-
 ## 🧠 AI Synchronized Routing
 
 The core routing engine in `backend/core/analyzer.py` finds the optimal gate for an attendee in **$O(N + k \log N)$** time.
