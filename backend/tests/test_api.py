@@ -3,10 +3,7 @@ from app import create_app as app_factory
 
 @pytest.fixture
 def flask_app():
-    app = app_factory()
-    app.config.update({
-        "TESTING": True,
-    })
+    app = app_factory(testing=True)
     yield app
 
 @pytest.fixture

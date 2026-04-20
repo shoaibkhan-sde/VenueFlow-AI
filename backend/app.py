@@ -29,12 +29,13 @@ from api.routes_config import config_bp
 from services.simulation_service import start_simulation
 
 
-def create_app() -> Flask:
+def create_app(testing: bool = False) -> Flask:
     # Set static_folder to 'static' (where Stage 1 of Dockerfile puts React build)
     app = Flask(__name__, static_folder='static', static_url_path='')
     
     app.config.from_mapping(
         SECRET_KEY=Config.SECRET_KEY,
+        TESTING=testing
     )
 
     # ── CORS ─────────────────────────────────────────────────
@@ -77,34 +78,41 @@ def create_app() -> Flask:
     import api.sockets 
 
     # ── Startup Initialization (Stabilized & Non-Blocking) ─────
-    try:
-        from services.redis_service import init_redis_data, sync_state_to_cloud
-        from services.simulation_service import start_simulation
-        from services.alert_service import purge_old_history
-        import threading
+    # SKIP during tests to prevent I/O errors and background thread leaks
+    if not app.config.get("TESTING"):
+        try:
+            from services.redis_service import init_redis_data, sync_state_to_cloud
+            from services.simulation_service import start_simulation
+            from services.alert_service import purge_old_history
+            import threading
 
-        # 1. Fast Seed (Redis only)
-        init_redis_data()
-        
-        # 2. Heavy Sync (Firestore) - Run in background to prevent 503 timeouts
-        threading.Thread(target=sync_state_to_cloud, daemon=True).start()
-        
-        # 3. Background Services
-        start_simulation(app)
-        
-        with app.app_context():
-            purge_old_history()
+            # 1. Fast Seed (Redis only)
+            init_redis_data()
             
-    except Exception as e:
-        app.logger.warning(f"Startup Optimization Skipped: {e}")
+            # 2. Heavy Sync (Firestore) - Run in background to prevent 503 timeouts
+            threading.Thread(target=sync_state_to_cloud, daemon=True).start()
+            
+            # 3. Background Services
+            start_simulation(app)
+            
+            with app.app_context():
+                purge_old_history()
+                
+        except Exception as e:
+            app.logger.warning(f"Startup Optimization Skipped: {e}")
 
     return app
 
 
 # ── Production Entry Point ──────────────────────────────────
-# Gunicorn looks for a variable named 'app' in this file
-app = create_app()
+# Gunicorn looks for a variable named 'app' in this file.
+# We avoid double-initialization during 'pytest' collection by checking sys.modules.
+if "pytest" not in sys.modules:
+    app = create_app()
 
 if __name__ == "__main__":
+    # If explicitly run as a script, we force create the app if it doesn't exist
+    if "app" not in globals():
+        app = create_app()
     # log_output=False prevents terminal-killing UnicodeEncodeErrors in Windows/Docker
     socketio.run(app, host="0.0.0.0", port=5000, debug=True, log_output=False, allow_unsafe_werkzeug=True)
