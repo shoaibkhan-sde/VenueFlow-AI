@@ -1,6 +1,6 @@
 import pytest
-from backend.core.analyzer import find_fastest_gate, rebalance_crowd
-from backend.core.models import Gate
+from core.analyzer import find_fastest_gate, rebalance_crowd
+from core.models import Gate
 
 @pytest.fixture
 def sample_gates():
