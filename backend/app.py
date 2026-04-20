@@ -13,6 +13,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
+from flask_talisman import Talisman
 
 # Removed 'backend.' prefix because Docker flattens the folder structure
 from config import Config
@@ -40,6 +41,48 @@ def create_app(testing: bool = False) -> Flask:
 
     # ── CORS ─────────────────────────────────────────────────
     CORS(app, origins=Config.CORS_ORIGINS)
+
+    # ── Security Hardening (Talisman) ───────────────────────
+    # We use a balanced CSP that allow Google Services while blocking XSS/Clickjacking
+    csp = {
+        'default-src': "'self'",
+        'script-src': [
+            "'self'",
+            "'unsafe-inline'", # React 19/Vite dev mode compatibility
+            'https://maps.googleapis.com',
+            'https://*.firebaseapp.com',
+            'https://*.googleapis.com'
+        ],
+        'style-src': [
+            "'self'",
+            "'unsafe-inline'", # Tailwind CSS compatibility
+            'https://fonts.googleapis.com',
+            'https://*.googleapis.com'
+        ],
+        'img-src': [
+            "'self'", 
+            'data:', 
+            'https://maps.gstatic.com',
+            'https://*.googleapis.com',
+            'https://*.maptiler.com' # Temporary until migration complete
+        ],
+        'connect-src': [
+            "'self'",
+            'ws://localhost:*', # Development sockets
+            'wss://*.cloudfunctions.net',
+            'https://*.googleapis.com',
+            'https://*.firebaseio.com'
+        ],
+        'font-src': ["'self'", 'https://fonts.gstatic.com']
+    }
+    
+    # force_https=False for development, True in production via Config
+    Talisman(app, 
+             content_security_policy=csp, 
+             force_https=not Config.DEVELOPMENT_MODE,
+             strict_transport_security=True,
+             session_cookie_secure=not Config.DEVELOPMENT_MODE)
+
 
     # ── Rate Limiting ────────────────────────────────────────
     limiter.init_app(app)

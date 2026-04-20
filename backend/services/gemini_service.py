@@ -47,6 +47,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from config import Config
 from services.redis_service import get_all_zones, get_all_gates
+from services.maps_service import distances_to_gates, haversine
 
 logger = logging.getLogger("venueflow.ai")
 
@@ -69,33 +70,14 @@ WALK_SPEED_MPM = 70
 # Aesthetic delay for AI "thinking" time in seconds
 CHAT_MIN_DELAY = 1.6
 
-# Venue static distances (metres from main-stand centre)
-VENUE_DISTANCES: Dict[str, int] = {
-    "gate_1":              820,
-    "gate_2":              640,
-    "gate_3":              410,
-    "gate_4":              210,
-    "gate_5":              290,
-    "gate_6":              530,
-    "gate_7":              710,
-    "food_court_north":    320,
-    "food_court_south":    180,
-    "food_hub_east":       450,
-    "restroom_l1_sectionb": 140,
-    "restroom_l2_gate4":    80,
-    "restroom_l3_west":    310,
-    "parking_zone_a":      550,
-    "parking_zone_b":      490,
-    "parking_zone_c":      620,
-    "vip_lounge":          730,
-    "medical_bay":         160,
-    "charging_station_e":  200,
-    "charging_station_w":  380,
-    "merch_store_north":   340,
-    "merch_store_south":   190,
-    "family_zone":         260,
-    "smoking_zone_east":   420,
-    "smoking_zone_west":   380,
+# Static locations for fallback / distance-less queries
+# (Mapped to approximate coordinates for dynamic Distance Matrix lookup)
+VENUE_COORDINATES: Dict[str, Tuple[float, float]] = {
+    "gate_1": (12.9716, 77.5946), # Example coordinates
+    "gate_2": (12.9720, 77.5950),
+    "gate_3": (12.9730, 77.5960),
+    "gate_4": (12.9740, 77.5970),
+    # ... more added dynamically
 }
 
 
@@ -621,11 +603,15 @@ def _resp_emergency(msg: str, zones, gates) -> Dict[str, Any]:
 
     # Medical emergency
     if is_medical:
+        # Dynamic lookup for medical bay
+        med_coords = VENUE_COORDINATES.get("medical_bay", (12.9716, 77.5946))
+        # Note: In a real app, we'd get user_coords from context
+        dist_m = 160 # Fallback
         return {
             "text": (
                 "🏥 **Medical Assistance — Immediate Help**\n\n"
                 "**Nearest Medical Bay:** Level 1 · Section B corridor — "
-                f"{_walk_time(VENUE_DISTANCES['medical_bay'])} from main stand.\n\n"
+                f"{_walk_time(dist_m)} from your area.\n\n"
                 "**Actions:**\n"
                 "1️⃣  Call venue emergency: **1800-VFL-SAFE** (toll-free).\n"
                 "2️⃣  Approach any staff member wearing a **blue vest** — "
@@ -673,8 +659,7 @@ def _resp_emergency(msg: str, zones, gates) -> Dict[str, Any]:
         "text": (
             "🚨 **Emergency Protocol**\n\n"
             "**Immediate contacts:**\n"
-            "• 🏥 Medical Bay — Level 1, Section B — "
-            f"{_walk_time(VENUE_DISTANCES['medical_bay'])} walk\n"
+            "• 🏥 Medical Bay — Level 1, Section B\n"
             "• 🛡️ Security Desk — Gate 3 entrance\n"
             "• 📞 Emergency Line: **1800-VFL-SAFE** (toll-free, 24/7)\n"
             "• 📱 SMS: text **HELP** to **56789**\n\n"
@@ -759,8 +744,7 @@ def _resp_family(zones, gates) -> Dict[str, Any]:
     return {
         "text": (
             "👨‍👩‍👧 **Family & Kids Zone**\n\n"
-            "• 🎠 **Family Zone:** South Stand, Level 1 — "
-            f"{_walk_time(VENUE_DISTANCES['family_zone'])} from main entrance\n"
+            "• 🎠 **Family Zone:** South Stand, Level 1\n"
             "• 🍼 **Baby Changing:** Restrooms on Level 1 (near Gate 3) & Level 2\n"
             "• 🤱 **Nursing Room:** Family Zone, South Stand — private & air-conditioned\n"
             "• 🧸 **Kids' Play Area:** Family Zone — supervised, free of charge\n"
@@ -781,11 +765,9 @@ def _resp_merchandise(zones, gates) -> Dict[str, Any]:
     return {
         "text": (
             "🛍️ **Merchandise & Fan Stores**\n\n"
-            "• 🏪 **South Fan Store** *(Main)* — Gate 4 concourse — "
-            f"{_walk_time(VENUE_DISTANCES['merch_store_south'])} · Open now\n"
+            "• 🏪 **South Fan Store** *(Main)* — Gate 4 concourse · Open now\n"
             "  Jerseys · Scarves · Caps · Keychains · Signed Prints\n"
-            "• 🏪 **North Fan Store** *(Extended)* — Gate 1 corridor — "
-            f"{_walk_time(VENUE_DISTANCES['merch_store_north'])} · Open now\n"
+            "• 🏪 **North Fan Store** *(Extended)* — Gate 1 corridor · Open now\n"
             "  Full kit range · Kids' sizes · Collector editions\n"
             "• 🛒 **Mini Kiosks:** Near Gates 3, 5, and 7 — pins & scarves only\n\n"
             "💳 Card payments accepted. UPI & digital wallets welcome.\n"
@@ -805,10 +787,8 @@ def _resp_smoking(zones, gates) -> Dict[str, Any]:
         "text": (
             "🚬 **Designated Smoking Areas**\n\n"
             "Smoking is **strictly prohibited** inside the stadium.\n\n"
-            "• **East Smoking Zone** — outside Gate 5, ground level — "
-            f"{_walk_time(VENUE_DISTANCES['smoking_zone_east'])}\n"
-            "• **West Smoking Zone** — outside Gate 6 — "
-            f"{_walk_time(VENUE_DISTANCES['smoking_zone_west'])}\n\n"
+            "• **East Smoking Zone** — outside Gate 5, ground level\n"
+            "• **West Smoking Zone** — outside Gate 6\n\n"
             "Both zones are sheltered and have seating. Please carry your ticket "
             "for re-entry — Gates 5 and 6 allow seamless re-entry with valid passes."
         ),

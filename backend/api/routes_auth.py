@@ -9,6 +9,7 @@ import datetime
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
+from firebase_admin import auth as firebase_auth
 from config import Config
 from extensions import limiter
 
@@ -27,18 +28,18 @@ def token_required(f):
         try:
             if token.startswith("Bearer "):
                 token = token.split(" ")[1]
-            data = jwt.decode(token, Config.JWT_SECRET, algorithms=["HS256"])
-            current_user = _users.get(data["username"])
             
-            # Dev-Persistence: If server restarted but token is valid, self-heal the mock db
-            if not current_user:
-                username = data["username"]
-                # Store a dummy hash for recovered sessions to keep it "valid" but inoperable for re-login without register
-                _users[username] = {"username": username, "password": "pbkdf2:sha256:recovered-session-placeholder"}
-                current_user = _users[username]
-                
+            # Verify Firebase ID Token
+            # This is the "Gold Standard" for Google Build with AI apps
+            decoded_token = firebase_auth.verify_id_token(token)
+            current_user = {
+                "uid": decoded_token["uid"],
+                "email": decoded_token.get("email"),
+                "name": decoded_token.get("name")
+            }
         except Exception as e:
-            return jsonify({"error": "Token is invalid!"}), 401
+            return jsonify({"error": f"Token verification failed: {str(e)}"}), 401
+            
         return f(current_user, *args, **kwargs)
     return decorated
 

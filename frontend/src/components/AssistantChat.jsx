@@ -202,6 +202,7 @@ export default function AssistantChat({ messages = [], setMessages }) {
                     scale: input.trim() ? 1 : 0.95
                   }}
                   onClick={() => sendMessage(input)}
+                  aria-label="Send message"
                   className={`p-2.5 rounded-full transition-all duration-300 shadow-sm ${input.trim()
                     ? "bg-accent-blue text-white hover:bg-blue-700 shadow-lg"
                     : "bg-theme-main text-theme-secondary opacity-40 cursor-default"
@@ -234,6 +235,9 @@ export default function AssistantChat({ messages = [], setMessages }) {
               ref={listRef}
               onScroll={handleScroll}
               className="flex-1 min-h-0 overflow-y-auto pt-4 sm:pt-6 pb-8 sm:pb-12 flex flex-col gap-y-10 sm:gap-y-16 scrollbar-hide px-2 sm:px-4 overscroll-contain"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions"
             >
               <AnimatePresence mode="popLayout">
                 {messages.map((msg) => (
