@@ -10,8 +10,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety Force-Render: If Firebase listener hangs (CSP or network issue), 
+    // we force render after 3s to allow Guest access.
+    const safetyTimer = setTimeout(() => {
+      if (loading) {
+        console.warn("[AUTH] Safety timeout reached - Force rendering Guest UI.");
+        setLoading(false);
+      }
+    }, 3000);
+
     if (!isFirebaseEnabled || !auth) {
       setLoading(false);
+      clearTimeout(safetyTimer);
       return;
     }
 
@@ -21,8 +31,12 @@ export function AuthProvider({ children }) {
         setToken(firebaseUser.uid);
       }
       setLoading(false);
+      clearTimeout(safetyTimer);
     });
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   const loginWithGoogle = async () => {

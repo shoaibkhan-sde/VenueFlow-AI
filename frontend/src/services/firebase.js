@@ -29,6 +29,7 @@ const isConfigValid =
 
 if (isConfigValid) {
   try {
+    console.log("[FIREBASE] Initializing with Project:", firebaseConfig.projectId);
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     googleProvider = new GoogleAuthProvider();
@@ -39,6 +40,11 @@ if (isConfigValid) {
   }
 } else {
   console.warn("[WARN] Firebase Config is missing or contains placeholders. Google Authentication will be disabled.");
+  console.debug("Config Check:", { 
+    hasApiKey: !!firebaseConfig.apiKey, 
+    hasAppId: !!firebaseConfig.appId,
+    env: import.meta.env.MODE 
+  });
 }
 
 export { auth, googleProvider, isFirebaseEnabled };

@@ -65,12 +65,13 @@ def create_app(testing: bool = False) -> Flask:
     # ── Security Hardening (Talisman) ───────────────────────
     csp = {
         'default-src': "'self'",
-        'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', 'https://*.googleapis.com', 'https://*.firebaseapp.com'],
+        'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', 'https://*.googleapis.com', 'https://*.firebaseapp.com', 'https://apis.google.com'],
         'worker-src': ["'self'", 'blob:'],
         'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         'img-src': ["'self'", 'data:', 'https://*.googleapis.com', 'https://*.maptiler.com'],
-        'connect-src': ["'self'", 'ws://localhost:*', 'wss://*.cloudrun.app', 'https://*.googleapis.com', 'https://*.firebaseio.com', 'https://*.maptiler.com'],
-        'font-src': ["'self'", 'https://fonts.gstatic.com']
+        'connect-src': ["'self'", 'ws://localhost:*', 'wss://*.cloudrun.app', 'https://*.cloudrun.app', 'https://*.googleapis.com', 'https://*.firebaseio.com', 'https://*.maptiler.com'],
+        'font-src': ["'self'", 'https://fonts.gstatic.com'],
+        'frame-src': ["'self'", 'https://*.firebaseapp.com', 'https://apis.google.com', 'https://venueflow-ai-493715.firebaseapp.com/']
     }
     
     # Initialize Talisman globally. We disable force_https at the Flask level 
@@ -81,7 +82,7 @@ def create_app(testing: bool = False) -> Flask:
              force_https=False,
              session_cookie_secure=not Config.DEVELOPMENT_MODE,
              session_cookie_http_only=True,
-             frame_options='DENY')
+             frame_options=None) # Set to None only if using Firebase Popup/Iframe login
 
     limiter.init_app(app)
 
@@ -97,12 +98,30 @@ def create_app(testing: bool = False) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(config_bp)
 
-    # ── Frontend Serving Logic ───────────────────────────────
+    # ── Smart SPA Routing (Prevents Infinite Loading) ────────
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve(path):
-        if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        """
+        Hardened asset delivery:
+        1. Ensures API 404s are never masked by index.html (which crashes frontend)
+        2. Serves static assets (js/css/images) with correct MIME types
+        3. Falls back to index.html ONLY for extension-less SPA UI routes
+        """
+        # Block API fallbacks
+        if path.startswith("api/"):
+            return jsonify({"error": "Not Found"}), 404
+            
+        # Check if file exists in static folder
+        full_path = os.path.join(app.static_folder, path)
+        if path != "" and os.path.exists(full_path):
             return send_from_directory(app.static_folder, path)
+            
+        # Extension-aware fallback: If it's a file request that doesn't exist, 404 it.
+        # Otherwise, assume it's a React route (no extension) and serve index.html.
+        if "." in path and not path.endswith(".html"):
+            return "Asset not found", 404
+            
         return send_from_directory(app.static_folder, 'index.html')
 
     # ── Fast Health Check (Standalone HTTP Resilience) ───────
