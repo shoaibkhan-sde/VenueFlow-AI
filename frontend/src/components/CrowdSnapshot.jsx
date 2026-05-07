@@ -42,16 +42,21 @@ export default function CrowdSnapshot() {
     'global': { occupancy: 70355, wait: 8, cap: 100000 }
   };
 
-  const fallback = DUMMY_FALLBACKS[locationId] || DUMMY_FALLBACKS.global;
-
-  const localOccupancy = localZone ? (localZone.currentOccupancy ?? localZone.occupancy ?? fallback.occupancy) : fallback.occupancy;
-  const localCapacity = localZone ? (localZone.capacity || fallback.cap) : fallback.cap;
-  const localPeak = localZone ? (localZone.peakOccupancy || localOccupancy) : Math.round(localOccupancy * 1.05);
-  const localWait = localZone ? (localZone.waitTime || fallback.wait + Math.round(Math.random() * 2)) : fallback.wait;
-
-  // 3. Derived Metrics
-  const capacityPercent = Math.round((localOccupancy / localCapacity) * 100) || 0;
-  const isOverCapacity = localOccupancy > localCapacity;
+  // FIX: All derived metrics are computed inside useMemo so that Math.random()
+  // (used for wait-time jitter) is NOT called on every render. Previously this
+  // caused an infinite loop: random value → new prop → child re-render → parent
+  // re-render → new random value → …
+  const { localOccupancy, localCapacity, localPeak, localWait, capacityPercent, isOverCapacity } = useMemo(() => {
+    const fallback = DUMMY_FALLBACKS[locationId] || DUMMY_FALLBACKS.global;
+    const occ   = localZone ? (localZone.currentOccupancy ?? localZone.occupancy ?? fallback.occupancy) : fallback.occupancy;
+    const cap   = localZone ? (localZone.capacity || fallback.cap) : fallback.cap;
+    const peak  = localZone ? (localZone.peakOccupancy || occ) : Math.round(occ * 1.05);
+    // Math.random() is safe here — it runs only when localZone or locationId changes
+    const wait  = localZone ? (localZone.waitTime || fallback.wait + Math.round(Math.random() * 2)) : fallback.wait;
+    const pct   = Math.round((occ / cap) * 100) || 0;
+    return { localOccupancy: occ, localCapacity: cap, localPeak: peak, localWait: wait, capacityPercent: pct, isOverCapacity: occ > cap };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localZone, locationId]);
 
   // Logic: Matches GateStatus.jsx "clear" status criteria
   const getGateStatus = (gate) => {

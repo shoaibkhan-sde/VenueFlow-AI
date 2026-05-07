@@ -38,7 +38,7 @@ export function useMetrics() {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
     };
-  }, [token]);
+  }, []);
 
   return { metrics, connected };
 }
