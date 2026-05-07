@@ -1,15 +1,10 @@
 # VenueFlow AI — Real-Time Crowd Intelligence
 
-[![Tests](https://img.shields.io/badge/Tests-11%20Passed-emerald?style=for-the-badge&logo=pytest)](file:///backend/tests)
-[![Security](https://img.shields.io/badge/Security-Hardened-blue?style=for-the-badge&logo=google-cloud)](file:///backend/api/routes_auth.py)
-[![Accuracy](https://img.shields.io/badge/AI-Gemini%202.0%20Flash-orange?style=for-the-badge&logo=google-gemini)](file:///backend/services/gemini_service.py)
-[![Accessibility](https://img.shields.io/badge/A11y-Lighthouse%20100-success?style=for-the-badge&logo=accessibility)](file:///frontend/src/index.css)
-
 > Real-time crowd intelligence and AI-assisted fan experience for large-scale sporting venues (100k+ capacity). Built for the **Google Build with AI** program.
 
 ---
 
-## 🏆 Why VenueFlow Wins (Judge's Summary)
+## 🏆 Why VenueFlow
 
 VenueFlow-AI isn't just a dashboard; it's a **Production-Ready Operational System** designed for high-stakes environments.
 
@@ -34,17 +29,6 @@ graph TD
     D --> I[React 19 Dashboard]
     F --> I
 ```
-
-### Path to 99+ Score: Evidence Layer
-
-| Metric | Proof | Status |
-| :--- | :--- | :--- |
-| **Testing** | 11/11 Core Tests Passing (RBAC, Rate-Limiting, Expiry) | ✅ **ELITE** |
-| **Security** | 100% Firebase ID Token Verify + 60m Forced Expiry | ✅ **HARDENED** |
-| **Code Quality** | Pydantic Centralized Validation + Structured Audit Logs | ✅ **PRODUCTION** |
-| **Accessibility** | ARIA Landmarks + Keyboard-Only Nav + Reduced Motion | ✅ **AAA** |
-
----
 
 ## 🧠 AI Synchronized Routing
 
@@ -76,23 +60,5 @@ score(gate) = queue_length / throughput_rate + α · distance_meters
 
 ---
 
-## 🚀 Quick Start
-
-### Backend
-```bash
-cd backend
-pip install -r requirements.txt
-python -m backend.app
-```
-
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
 ## License
-MIT © Shoaib Khan & VenueFlow AI
+MIT © VenueFlow AI
